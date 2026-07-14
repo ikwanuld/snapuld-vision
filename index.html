@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapULD Vision</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <div class="app-header">
+      <div>
+        <h1>SnapULD Vision</h1>
+        <div class="subtitle">Camera-based ULD scanning</div>
+      </div>
+      <div class="status-pill" id="connection-status">
+        <span class="dot"></span>
+        <span id="connection-status-text">Camera Ready</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="card-title">Live Camera</p>
+      <div class="camera-wrap">
+        <video id="camera-video" autoplay playsinline muted></video>
+        <canvas id="capture-canvas"></canvas>
+        <div class="scan-frame"></div>
+        <div class="scanning-badge" id="scanning-badge">
+          <span class="spinner"></span>
+          <span id="scanning-badge-text">Scanning...</span>
+        </div>
+        <div class="camera-overlay-msg" id="camera-overlay-msg"></div>
+      </div>
+
+      <div class="detection-result">
+        <div class="detection-status" id="detection-status">Searching...</div>
+        <div class="detection-value" id="detection-value">&nbsp;</div>
+        <div class="candidate-chips" id="candidate-chips"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="card-title">Last Saved ULD</p>
+      <div class="last-saved-row" id="last-saved-row">
+        <span class="empty-hint">No scans saved yet this session.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="card-title">Scan Details</p>
+      <div class="form-row">
+        <label for="station-select">Station</label>
+        <select id="station-select"></select>
+      </div>
+      <div class="form-row">
+        <label for="user-input">Operator Name</label>
+        <input type="text" id="user-input" placeholder="e.g. Ikwan" autocomplete="off">
+      </div>
+      <button class="btn btn-secondary" id="restart-camera-btn" type="button">
+        Restart Camera
+      </button>
+    </div>
+
+    <footer class="app-footer">SnapULD Vision &middot; MVP &middot; GitHub Pages</footer>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
