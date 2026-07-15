@@ -150,12 +150,20 @@
       .catch(function (err) {
         console.error('OCR error:', err);
         setDetectionState('none', 'No ULD Found');
+        // Surface the real error instead of just showing "not found" -
+        // this is usually the CDN/worker failing to load, not a scanning miss
+        showToast('OCR error: ' + (err && err.message ? err.message : 'unknown'), 'danger');
       })
       .finally(function () {
         state.ocrRunning = false;
         setScanningIndicator(false);
       });
   }
+
+  // How much of the video frame to crop, matching the .scan-frame CSS inset (12%)
+  const SCAN_INSET_RATIO = 0.12;
+  // Upscale the cropped region before OCR - small crops read much better upscaled
+  const UPSCALE_FACTOR = 2;
 
   function captureFrame() {
     return new Promise(function (resolve, reject) {
@@ -164,13 +172,53 @@
         reject(new Error('Video not ready'));
         return;
       }
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const insetX = vw * SCAN_INSET_RATIO;
+      const insetY = vh * SCAN_INSET_RATIO;
+      const cropW = vw - insetX * 2;
+      const cropH = vh - insetY * 2;
+
       const canvas = dom.canvas;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = cropW * UPSCALE_FACTOR;
+      canvas.height = cropH * UPSCALE_FACTOR;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Draw only the region inside the scan-frame guide, upscaled
+      ctx.drawImage(
+        video,
+        insetX, insetY, cropW, cropH,   // source rect (crop)
+        0, 0, canvas.width, canvas.height // dest rect (upscaled)
+      );
+
+      preprocessForOcr(ctx, canvas.width, canvas.height);
       resolve(canvas);
     });
+  }
+
+  // Grayscale + contrast stretch/threshold - helps a lot on stamped/embossed ULD tags
+  function preprocessForOcr(ctx, w, h) {
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+
+    // First pass: convert to grayscale, track min/max for contrast stretch
+    let min = 255, max = 0;
+    const gray = new Uint8ClampedArray(w * h);
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+      const g = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      gray[p] = g;
+      if (g < min) min = g;
+      if (g > max) max = g;
+    }
+
+    const range = Math.max(1, max - min);
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+      const stretched = ((gray[p] - min) / range) * 255;
+      data[i] = data[i + 1] = data[i + 2] = stretched;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
   }
 
   function recognizeText(canvas) {
@@ -187,10 +235,22 @@
       return Promise.resolve(state.ocrWorker);
     }
     if (!state.ocrWorker) {
-      state.ocrWorker = Tesseract.createWorker('eng').then(function (worker) {
-        state.workerReady = true;
-        return worker;
-      });
+      state.ocrWorker = Tesseract.createWorker('eng')
+        .then(function (worker) {
+          // Tune Tesseract for short alphanumeric codes rather than paragraphs of text
+          return worker.setParameters({
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            tessedit_pageseg_mode: '11' // sparse text - good for isolated codes/labels
+          }).then(function () { return worker; });
+        })
+        .then(function (worker) {
+          state.workerReady = true;
+          return worker;
+        })
+        .catch(function (err) {
+          state.ocrWorker = null; // allow retry on next cycle
+          throw err;
+        });
     }
     return state.ocrWorker;
   }
