@@ -13,7 +13,7 @@
   const SCAN_FRAME_INSET_RATIO = 0.04;
 
   // Flip to true while debugging to see exactly what Tesseract read, on-screen and in console
-  const DEBUG_OCR = false;
+  const DEBUG_OCR = true;
 
   const state = {
     stream: null,
@@ -193,8 +193,15 @@
     });
   }
 
-  // Crop to the on-screen scan-frame area and boost contrast so Tesseract
-  // isn't wasting effort on background clutter or low-contrast text.
+  // Minimum width (px) we want the cropped region to be before OCR. Phone
+  // camera frames often make handwritten/stenciled text only 20-30px tall,
+  // which is too small for reliable recognition — so we upscale first.
+  const OCR_MIN_WIDTH = 900;
+
+  // Crop to the on-screen scan-frame area, upscale if the text is small,
+  // then binarize using a threshold computed from the actual image
+  // (Otsu's method) instead of one fixed number — this survives shadows,
+  // glare, and uneven lighting far better than a hardcoded cutoff.
   function preprocessForOcr(sourceCanvas) {
     const fullW = sourceCanvas.width;
     const fullH = sourceCanvas.height;
@@ -204,22 +211,33 @@
     const cropW = fullW - cropX * 2;
     const cropH = fullH - cropY * 2;
 
+    const scale = cropW < OCR_MIN_WIDTH ? Math.min(3, OCR_MIN_WIDTH / cropW) : 1;
+    const outW = Math.round(cropW * scale);
+    const outH = Math.round(cropH * scale);
+
     const outCanvas = document.createElement('canvas');
-    outCanvas.width = cropW;
-    outCanvas.height = cropH;
+    outCanvas.width = outW;
+    outCanvas.height = outH;
     const outCtx = outCanvas.getContext('2d');
+    outCtx.imageSmoothingEnabled = true;
+    outCtx.imageSmoothingQuality = 'high';
 
-    outCtx.drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    outCtx.drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, outW, outH);
 
-    // Grayscale + simple threshold to turn faint/handwritten strokes into
-    // solid black-on-white, which OCR engines handle far more reliably.
-    const imageData = outCtx.getImageData(0, 0, cropW, cropH);
+    const imageData = outCtx.getImageData(0, 0, outW, outH);
     const data = imageData.data;
-    const THRESHOLD = 150;
+    const grayValues = new Uint8ClampedArray(outW * outH);
 
-    for (let i = 0; i < data.length; i += 4) {
-      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-      const value = gray > THRESHOLD ? 255 : 0;
+    for (let p = 0; p < grayValues.length; p++) {
+      const i = p * 4;
+      grayValues[p] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    }
+
+    const threshold = computeOtsuThreshold(grayValues);
+
+    for (let p = 0; p < grayValues.length; p++) {
+      const i = p * 4;
+      const value = grayValues[p] > threshold ? 255 : 0;
       data[i] = value;
       data[i + 1] = value;
       data[i + 2] = value;
@@ -228,28 +246,81 @@
     outCtx.putImageData(imageData, 0, 0);
 
     if (DEBUG_OCR) {
-      console.log('Preprocessed crop:', cropW, 'x', cropH, 'from full', fullW, 'x', fullH);
+      console.log('Preprocessed crop:', outW, 'x', outH, '(scale ' + scale.toFixed(2) + 'x) threshold=', threshold);
     }
 
     return outCanvas;
   }
 
+  // Standard Otsu's method: picks the brightness cutoff that best separates
+  // the image into two clusters (text vs. background) for this specific frame.
+  function computeOtsuThreshold(grayValues) {
+    const histogram = new Array(256).fill(0);
+    for (let i = 0; i < grayValues.length; i++) {
+      histogram[grayValues[i]]++;
+    }
+
+    const total = grayValues.length;
+    let sum = 0;
+    for (let t = 0; t < 256; t++) sum += t * histogram[t];
+
+    let sumB = 0;
+    let wB = 0;
+    let maxVariance = 0;
+    let threshold = 127;
+
+    for (let t = 0; t < 256; t++) {
+      wB += histogram[t];
+      if (wB === 0) continue;
+      const wF = total - wB;
+      if (wF === 0) break;
+
+      sumB += t * histogram[t];
+      const mB = sumB / wB;
+      const mF = (sum - sumB) / wF;
+      const variance = wB * wF * (mB - mF) * (mB - mF);
+
+      if (variance > maxVariance) {
+        maxVariance = variance;
+        threshold = t;
+      }
+    }
+
+    return threshold;
+  }
+
+  // PSM 7 (single line) is tried first since a cropped ULD code is usually
+  // one line. If that comes back empty, PSM 11 (sparse text, no layout
+  // assumptions) is more forgiving of tilted text, extra marks, or a crop
+  // that isn't a perfectly clean single line — this is what usually rescues
+  // the "(empty)" case.
   function recognizeText(canvas) {
     setDetectionState('searching', 'Searching...');
     return getOcrWorker()
       .then(function (worker) {
+        return runRecognitionPass(worker, canvas, '7').then(function (text) {
+          if (text && text.trim().length > 0) return text;
+          if (DEBUG_OCR) console.log('First pass empty, retrying with sparse-text mode...');
+          return runRecognitionPass(worker, canvas, '11');
+        });
+      })
+      .catch(function (err) {
+        err.isEngineError = true;
+        throw err;
+      });
+  }
+
+  function runRecognitionPass(worker, canvas, pageSegMode) {
+    return worker.setParameters({ tessedit_pageseg_mode: pageSegMode })
+      .then(function () {
         return worker.recognize(canvas);
       })
       .then(function (result) {
         const text = (result && result.data && result.data.text) ? result.data.text : '';
         if (DEBUG_OCR) {
-          console.log('Raw OCR text:', JSON.stringify(text));
+          console.log('Raw OCR text (PSM ' + pageSegMode + '):', JSON.stringify(text));
         }
         return text;
-      })
-      .catch(function (err) {
-        err.isEngineError = true;
-        throw err;
       });
   }
 
@@ -260,12 +331,12 @@
     if (!state.ocrWorker) {
       state.ocrWorker = Tesseract.createWorker('eng')
         .then(function (worker) {
-          // Restrict to what a ULD code can contain, and treat the crop as a
-          // single line of text rather than a full page — both cut down on
-          // misreads for a short isolated code.
+          // Restrict to what a ULD code can contain — cuts down on misreads
+          // for a short isolated code. Page segmentation mode is set per
+          // recognition attempt (see runRecognitionPass) since we try more
+          // than one strategy.
           return worker.setParameters({
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-            tessedit_pageseg_mode: '7'
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
           }).then(function () {
             state.workerReady = true;
             return worker;
