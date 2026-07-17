@@ -1,9 +1,19 @@
 (function () {
   'use strict';
 
-  const ULD_REGEX = /[A-Z]{3}\d{5}[A-Z]{2}/g; 
-  const OCR_INTERVAL_MS = 2500;               
-  const DUPLICATE_WINDOW_MS = 10000;          
+  // Matches 3 letters + 5 digits + 2 letters, e.g. AKE12345AK
+  // Applied AFTER we strip every non-alphanumeric character, so it survives
+  // spaces, dashes, underscores, slashes between the groups (AKE 12345 AK, AKE-12345-AK, etc.)
+  const ULD_REGEX = /[A-Z]{3}\d{5}[A-Z]{2}/g;
+
+  const OCR_INTERVAL_MS = 2500;
+  const DUPLICATE_WINDOW_MS = 10000;
+
+  // Matches the CSS .scan-frame { inset: 12%; } so we only OCR what the user sees framed
+  const SCAN_FRAME_INSET_RATIO = 0.12;
+
+  // Flip to true while debugging to see exactly what Tesseract read, on-screen and in console
+  const DEBUG_OCR = false;
 
   const state = {
     stream: null,
@@ -61,7 +71,6 @@
   }
 
   function loadStations() {
-    // Fallback list langsung di frontend
     dom.stationSelect.innerHTML = '';
     ['KUL', 'PEN', 'BKI', 'KCH', 'JHB'].forEach(function (code) {
       const opt = document.createElement('option');
@@ -85,7 +94,9 @@
       video: {
         facingMode: 'environment',
         width: { ideal: 1280 },
-        height: { ideal: 720 }
+        height: { ideal: 720 },
+        // Ask for continuous autofocus where supported so close-up paper/tags stay sharp
+        focusMode: 'continuous'
       },
       audio: false
     };
@@ -145,14 +156,19 @@
     setScanningIndicator(true);
 
     captureFrame()
+      .then(preprocessForOcr)
       .then(recognizeText)
       .then(handleOcrResult)
       .catch(function (err) {
         console.error('OCR error:', err);
-        setDetectionState('none', 'No ULD Found');
-        // Surface the real error instead of just showing "not found" -
-        // this is usually the CDN/worker failing to load, not a scanning miss
-        showToast('OCR error: ' + (err && err.message ? err.message : 'unknown'), 'danger');
+        // Distinguish "engine/network broke" from "nothing found" so it's obvious
+        // when the problem is Tesseract/CDN rather than the tag itself.
+        if (err && err.isEngineError) {
+          setDetectionState('none', 'OCR Engine Error');
+          setConnectionStatus(false, 'OCR Unavailable');
+        } else {
+          setDetectionState('none', 'No ULD Found');
+        }
       })
       .finally(function () {
         state.ocrRunning = false;
@@ -160,11 +176,7 @@
       });
   }
 
-  // How much of the video frame to crop, matching the .scan-frame CSS inset (12%)
-  const SCAN_INSET_RATIO = 0.12;
-  // Upscale the cropped region before OCR - small crops read much better upscaled
-  const UPSCALE_FACTOR = 2;
-
+  // Grab the raw video frame at full resolution
   function captureFrame() {
     return new Promise(function (resolve, reject) {
       const video = dom.video;
@@ -172,62 +184,73 @@
         reject(new Error('Video not ready'));
         return;
       }
-
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      const insetX = vw * SCAN_INSET_RATIO;
-      const insetY = vh * SCAN_INSET_RATIO;
-      const cropW = vw - insetX * 2;
-      const cropH = vh - insetY * 2;
-
       const canvas = dom.canvas;
-      canvas.width = cropW * UPSCALE_FACTOR;
-      canvas.height = cropH * UPSCALE_FACTOR;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
-
-      // Draw only the region inside the scan-frame guide, upscaled
-      ctx.drawImage(
-        video,
-        insetX, insetY, cropW, cropH,   // source rect (crop)
-        0, 0, canvas.width, canvas.height // dest rect (upscaled)
-      );
-
-      preprocessForOcr(ctx, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       resolve(canvas);
     });
   }
 
-  // Grayscale + contrast stretch/threshold - helps a lot on stamped/embossed ULD tags
-  function preprocessForOcr(ctx, w, h) {
-    const imageData = ctx.getImageData(0, 0, w, h);
+  // Crop to the on-screen scan-frame area and boost contrast so Tesseract
+  // isn't wasting effort on background clutter or low-contrast text.
+  function preprocessForOcr(sourceCanvas) {
+    const fullW = sourceCanvas.width;
+    const fullH = sourceCanvas.height;
+
+    const cropX = Math.round(fullW * SCAN_FRAME_INSET_RATIO);
+    const cropY = Math.round(fullH * SCAN_FRAME_INSET_RATIO);
+    const cropW = fullW - cropX * 2;
+    const cropH = fullH - cropY * 2;
+
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = cropW;
+    outCanvas.height = cropH;
+    const outCtx = outCanvas.getContext('2d');
+
+    outCtx.drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+    // Grayscale + simple threshold to turn faint/handwritten strokes into
+    // solid black-on-white, which OCR engines handle far more reliably.
+    const imageData = outCtx.getImageData(0, 0, cropW, cropH);
     const data = imageData.data;
+    const THRESHOLD = 150;
 
-    // First pass: convert to grayscale, track min/max for contrast stretch
-    let min = 255, max = 0;
-    const gray = new Uint8ClampedArray(w * h);
-    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-      const g = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-      gray[p] = g;
-      if (g < min) min = g;
-      if (g > max) max = g;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      const value = gray > THRESHOLD ? 255 : 0;
+      data[i] = value;
+      data[i + 1] = value;
+      data[i + 2] = value;
     }
 
-    const range = Math.max(1, max - min);
-    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-      const stretched = ((gray[p] - min) / range) * 255;
-      data[i] = data[i + 1] = data[i + 2] = stretched;
+    outCtx.putImageData(imageData, 0, 0);
+
+    if (DEBUG_OCR) {
+      console.log('Preprocessed crop:', cropW, 'x', cropH, 'from full', fullW, 'x', fullH);
     }
 
-    ctx.putImageData(imageData, 0, 0);
+    return outCanvas;
   }
 
   function recognizeText(canvas) {
     setDetectionState('searching', 'Searching...');
-    return getOcrWorker().then(function (worker) {
-      return worker.recognize(canvas);
-    }).then(function (result) {
-      return (result && result.data && result.data.text) ? result.data.text : '';
-    });
+    return getOcrWorker()
+      .then(function (worker) {
+        return worker.recognize(canvas);
+      })
+      .then(function (result) {
+        const text = (result && result.data && result.data.text) ? result.data.text : '';
+        if (DEBUG_OCR) {
+          console.log('Raw OCR text:', JSON.stringify(text));
+        }
+        return text;
+      })
+      .catch(function (err) {
+        err.isEngineError = true;
+        throw err;
+      });
   }
 
   function getOcrWorker() {
@@ -237,18 +260,20 @@
     if (!state.ocrWorker) {
       state.ocrWorker = Tesseract.createWorker('eng')
         .then(function (worker) {
-          // Tune Tesseract for short alphanumeric codes rather than paragraphs of text
+          // Restrict to what a ULD code can contain, and treat the crop as a
+          // single line of text rather than a full page — both cut down on
+          // misreads for a short isolated code.
           return worker.setParameters({
             tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-            tessedit_pageseg_mode: '11' // sparse text - good for isolated codes/labels
-          }).then(function () { return worker; });
-        })
-        .then(function (worker) {
-          state.workerReady = true;
-          return worker;
+            tessedit_pageseg_mode: '7'
+          }).then(function () {
+            state.workerReady = true;
+            return worker;
+          });
         })
         .catch(function (err) {
-          state.ocrWorker = null; // allow retry on next cycle
+          state.ocrWorker = null;
+          err.isEngineError = true;
           throw err;
         });
     }
@@ -257,6 +282,10 @@
 
   function handleOcrResult(rawText) {
     const candidates = extractValidUldCandidates(rawText);
+
+    if (DEBUG_OCR) {
+      dom.detectionValue.textContent = rawText ? rawText.trim().slice(0, 40) : '(empty)';
+    }
 
     if (candidates.length === 0) {
       setDetectionState('none', 'No ULD Found');
@@ -280,7 +309,9 @@
   function extractValidUldCandidates(rawText) {
     if (!rawText) return [];
     const upperText = rawText.toUpperCase();
-    const cleanedText = upperText.replace(/[-_\\\/]/g, ' ');
+    // Strip everything except letters/digits so spaces, dashes, underscores,
+    // slashes, and line breaks between the three groups no longer block a match.
+    const cleanedText = upperText.replace(/[^A-Z0-9]/g, '');
     const matches = cleanedText.match(ULD_REGEX);
     if (!matches) return [];
     return matches.filter(function (val, idx) {
@@ -304,7 +335,7 @@
   function setDetectionState(kind, label) {
     dom.detectionStatus.textContent = label;
     dom.detectionStatus.classList.toggle('found', kind === 'found');
-    if (kind !== 'found') {
+    if (kind !== 'found' && !DEBUG_OCR) {
       dom.detectionValue.textContent = '\u00A0';
     }
   }
@@ -329,7 +360,7 @@
 
   function attemptSave(uld, manualPick) {
     if (!manualPick && isDuplicate(uld)) {
-      return; 
+      return;
     }
 
     markDetected(uld);
@@ -345,7 +376,7 @@
     setConnectionStatus(true, 'Saving...');
 
     // SIMULASI SIMPAN (Kerana GitHub Pages tiada backend DB)
-    setTimeout(function() {
+    setTimeout(function () {
       setConnectionStatus(true, 'Camera Ready');
       showToast('Imbasan Dikesan (Simulasi)', 'success');
       updateLastSaved(record);
