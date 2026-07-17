@@ -120,7 +120,7 @@ html, body {
 
 .scan-frame {
   position: absolute;
-  inset: 12%;
+  inset: 4%;
   border: 2.5px solid rgba(255,255,255,0.55);
   border-radius: 14px;
   pointer-events: none;
