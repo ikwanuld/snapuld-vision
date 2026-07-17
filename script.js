@@ -9,11 +9,11 @@
   const OCR_INTERVAL_MS = 2500;
   const DUPLICATE_WINDOW_MS = 10000;
 
-  // Matches the CSS .scan-frame { inset: 12%; } so we only OCR what the user sees framed
-  const SCAN_FRAME_INSET_RATIO = 0.12;
+  // Matches the CSS .scan-frame { inset: 4%; } so we only OCR what the user sees framed
+  const SCAN_FRAME_INSET_RATIO = 0.04;
 
   // Flip to true while debugging to see exactly what Tesseract read, on-screen and in console
-  const DEBUG_OCR = true;
+  const DEBUG_OCR = false;
 
   const state = {
     stream: null,
