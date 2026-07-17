@@ -13,7 +13,7 @@
   const SCAN_FRAME_INSET_RATIO = 0.12;
 
   // Flip to true while debugging to see exactly what Tesseract read, on-screen and in console
-  const DEBUG_OCR = false;
+  const DEBUG_OCR = true;
 
   const state = {
     stream: null,
