@@ -889,6 +889,106 @@ body.light-theme .station-chip.active {
 }
 body.light-theme .expected-uld-chip { color: #0369a1; }
 
+/* ---------- Type count chips (Scanner page) ---------- */
+.type-count-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.type-count-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.type-count-chip .count {
+  color: var(--live);
+  font-weight: 700;
+}
+
+/* ---------- Scan History ---------- */
+.history-sort-select {
+  font-family: inherit;
+  font-size: 15px;
+  padding: 12px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-main);
+}
+
+.history-filter-group .station-chip {
+  padding: 8px 12px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.history-row {
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.history-row-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.history-row-summary:active {
+  transform: scale(0.99);
+}
+
+.history-detail {
+  display: none;
+  padding: 4px 12px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.history-detail.open {
+  display: block;
+}
+
+.history-detail-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin-top: 10px;
+}
+
+.history-detail-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.history-detail-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
 /* ---------- Buttons ---------- */
 .btn {
   font-family: inherit;
