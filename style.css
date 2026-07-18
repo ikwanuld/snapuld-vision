@@ -1,5 +1,5 @@
 :root {
-  /* Surfaces (Dark Theme Default) */
+  /* Surfaces (Dark Mode - Default) */
   --bg: #10141B;
   --surface: #1A212C;
   --surface-raised: #212938;
@@ -11,15 +11,16 @@
   --text-muted: #8B96A8;
   --text-faint: #5B6577;
 
-  /* Status language: cyan = live/scanning, teal = confirmed/saved, red = stop/remove */
-  --live: #0EA5E9;       /* Cyber Cyan / Electric Teal */
-  --live-dim: #073E5D;   /* Darker hue for backgrounds/borders */
+  /* Status language: cyan = live/active scanning, teal = confirmed, red = danger */
+  --live: #0EA5E9;         /* Cyber Cyan */
+  --live-dim: #0C3A54;     /* Deep Cyan Subsurface */
   --confirmed: #34D399;
   --confirmed-dim: #1C4F41;
   --danger: #F2545B;
   --danger-dim: #4A2226;
+  --info: #38BDF8;
+  --info-dim: #0F384E;
 
-  /* Radii & Layout specs */
   --radius-lg: 18px;
   --radius-md: 12px;
   --radius-sm: 9px;
@@ -28,43 +29,54 @@
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, Menlo, monospace;
 }
 
-/* ---------- ☀️ Sokongan Mod Cerah (Light Mode) untuk Kawasan Terbuka (On-Ramp) ---------- */
+/* ---------- AUTOMATIC LIGHT MODE FOR ON-RAMP / OUTDOOR USE ---------- */
 @media (prefers-color-scheme: light) {
   :root {
-    /* High-contrast, glare-resistant surfaces for outdoor sunlight usage */
+    /* High-contrast light surfaces for direct sunlight legibility */
     --bg: #F4F6F9;
     --surface: #FFFFFF;
-    --surface-raised: #EAEFF5;
-    --border: #C2D1E5;
-    --border-soft: #DFE6F0;
+    --surface-raised: #EBEFF5;
+    --border: #CCD4E0;
+    --border-soft: #E2E7F0;
 
-    /* High-contrast text fields */
+    /* Dark text for maximum contrast against white/grey */
     --text-main: #0F172A;
     --text-muted: #475569;
     --text-faint: #94A3B8;
 
-    /* Light mode optimized states */
-    --live: #0284C7;       /* Slightly deeper cyan for perfect readability against light surfaces */
-    --live-dim: #E0F2FE;   /* Soft luminous cyan background */
+    /* Adjusted status colors for light background visibility */
+    --live: #0284C7;         /* Darker Cyan for readable text/borders */
+    --live-dim: #E0F2FE;     /* Light blue tint for background badges */
     --confirmed: #059669;
     --confirmed-dim: #D1FAE5;
     --danger: #DC2626;
     --danger-dim: #FEE2E2;
-  }
-
-  /* Viewfinder camera dark box optimization when outdoor */
-  .camera-wrap {
-    background: #000000 !important;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-  }
-
-  .scanning-badge {
-    background: rgba(255, 255, 255, 0.9) !important;
-    border-color: var(--live) !important;
+    --info: #0284C7;
+    --info-dim: #E0F2FE;
   }
 }
 
-/* ---------- Global Resets ---------- */
+/* If you prefer using a toggle class instead of system media queries, 
+   you can also trigger it via JavaScript by adding .light-theme to the body */
+body.light-theme {
+  --bg: #F4F6F9;
+  --surface: #FFFFFF;
+  --surface-raised: #EBEFF5;
+  --border: #CCD4E0;
+  --border-soft: #E2E7F0;
+  --text-main: #0F172A;
+  --text-muted: #475569;
+  --text-faint: #94A3B8;
+  --live: #0284C7;
+  --live-dim: #E0F2FE;
+  --confirmed: #059669;
+  --confirmed-dim: #D1FAE5;
+  --danger: #DC2626;
+  --danger-dim: #FEE2E2;
+  --info: #0284C7;
+  --info-dim: #E0F2FE;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -74,7 +86,6 @@ html, body {
   color: var(--text-main);
   font-family: var(--font-ui);
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.25s ease, color 0.25s ease;
 }
 
 .app {
@@ -91,14 +102,34 @@ html, body {
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 4px 2px 0;
+}
+
+.header-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-main);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.header-back:active {
+  transform: scale(0.94);
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
 
 .brand-mark {
@@ -108,7 +139,7 @@ html, body {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: var(--live-dim);
+  background: rgba(14, 165, 233, 0.15); /* Modified for cyan */
   color: var(--live);
   flex-shrink: 0;
 }
@@ -119,12 +150,18 @@ html, body {
   margin: 0;
   color: var(--text-main);
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .subtitle {
   font-size: 12px;
   color: var(--text-muted);
   margin: 1px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-pill {
@@ -133,18 +170,25 @@ html, body {
   gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: var(--confirmed-dim);
+  background: rgba(52, 211, 153, 0.12);
   border: 1px solid rgba(52, 211, 153, 0.28);
   color: var(--confirmed);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .status-pill.offline {
-  background: var(--danger-dim);
+  background: rgba(242, 84, 91, 0.12);
   border-color: rgba(242, 84, 91, 0.3);
   color: var(--danger);
+}
+
+.status-pill.syncing {
+  background: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.3);
+  color: var(--live);
 }
 
 .status-pill .dot {
@@ -154,13 +198,19 @@ html, body {
   background: currentColor;
 }
 
+/* ---------- Views ---------- */
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 /* ---------- Cards ---------- */
 .card {
   background: var(--surface);
   border-radius: var(--radius-lg);
   padding: 16px;
   border: 1px solid var(--border-soft);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .card-title {
@@ -200,7 +250,180 @@ html, body {
   white-space: nowrap;
 }
 
-/* ---------- Camera / Viewfinder ---------- */
+/* Adjust text color in session count for light mode specifically */
+@media (prefers-color-scheme: light) {
+  .session-count {
+    color: #0369a1;
+  }
+}
+body.light-theme .session-count {
+  color: #0369a1;
+}
+
+/* ---------- Home / nav grid ---------- */
+.home-intro {
+  margin: 0 2px;
+}
+
+.nav-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.nav-card:active {
+  transform: scale(0.98);
+}
+
+.nav-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.nav-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.nav-chevron {
+  font-size: 20px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.nav-card-future {
+  opacity: 0.75;
+}
+
+.future-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--info);
+  background: var(--info-dim);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+@media (prefers-color-scheme: light) {
+  .future-badge { color: #0369a1; }
+}
+body.light-theme .future-badge { color: #0369a1; }
+
+.future-badge-lg {
+  display: inline-block;
+  font-size: 11px;
+  padding: 5px 12px;
+}
+
+.placeholder-card {
+  text-align: left;
+}
+
+.damage-hint {
+  margin-top: 4px;
+}
+
+/* ---------- Scanner context bar ---------- */
+.context-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.context-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.context-item-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.context-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.context-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-edit-btn {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--live);
+  background: var(--live-dim);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: light) {
+  .context-edit-btn { color: #0369a1; }
+}
+body.light-theme .context-edit-btn { color: #0369a1; }
+
+/* ---------- Camera / viewfinder ---------- */
 .camera-card {
   padding-bottom: 14px;
 }
@@ -277,6 +500,17 @@ html, body {
   gap: 6px;
 }
 
+@media (prefers-color-scheme: light) {
+  .scanning-badge {
+    background: rgba(255, 255, 255, 0.9);
+    color: #0284C7;
+  }
+}
+body.light-theme .scanning-badge {
+  background: rgba(255, 255, 255, 0.9);
+  color: #0284C7;
+}
+
 .live-dot {
   width: 7px;
   height: 7px;
@@ -313,7 +547,7 @@ html, body {
   display: flex;
 }
 
-/* ---------- Detection Readout ---------- */
+/* ---------- Detection readout ---------- */
 .detection-result {
   margin-top: 14px;
   display: flex;
@@ -340,13 +574,24 @@ html, body {
   font-weight: 600;
   letter-spacing: 0.12em;
   color: var(--live);
-  background: var(--surface-raised);
+  background: #05070A;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
   min-height: 24px;
   overflow-x: auto;
   white-space: nowrap;
+}
+
+@media (prefers-color-scheme: light) {
+  .detection-value {
+    background: #EBEFF5;
+    color: #0284C7;
+  }
+}
+body.light-theme .detection-value {
+  background: #EBEFF5;
+  color: #0284C7;
 }
 
 .candidate-chips {
@@ -369,15 +614,20 @@ html, body {
   cursor: pointer;
 }
 
+@media (prefers-color-scheme: light) {
+  .candidate-chip { color: #0284C7; }
+}
+body.light-theme .candidate-chip { color: #0284C7; }
+
 .candidate-chip:active {
   transform: scale(0.97);
 }
 
-/* ---------- Pending Queue ---------- */
+/* ---------- Pending queue ---------- */
 .pending-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .pending-row {
@@ -386,9 +636,16 @@ html, body {
   gap: 8px;
 }
 
-.pending-input {
+.pending-input-wrap {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pending-input {
+  width: 100%;
   font-family: var(--font-mono);
   font-size: 16px;
   font-weight: 600;
@@ -407,6 +664,20 @@ html, body {
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
 }
 
+.pending-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+  padding-left: 2px;
+}
+
+.pending-meta .type-known {
+  color: var(--info);
+}
+@media (prefers-color-scheme: light) {
+  .pending-meta .type-known { color: #0369a1; }
+}
+body.light-theme .pending-meta .type-known { color: #0369a1; }
+
 .pending-remove-btn {
   flex-shrink: 0;
   width: 40px;
@@ -424,31 +695,68 @@ html, body {
   transform: scale(0.95);
 }
 
-/* ---------- Last Saved ---------- */
-.last-saved-row {
+/* ---------- Scanned list ---------- */
+.scanned-list {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
 }
 
-.last-saved-uld {
+.scanned-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+
+.scanned-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scanned-uld {
   font-family: var(--font-mono);
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--text-main);
 }
 
-.badge-success {
-  background: var(--confirmed-dim);
-  color: var(--confirmed);
+.scanned-sub {
   font-size: 11px;
+  color: var(--text-faint);
+}
+
+.badge {
+  font-size: 10px;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 999px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
+
+.badge-synced {
+  background: var(--confirmed-dim);
+  color: var(--confirmed);
+}
+
+.badge-pending-sync {
+  background: var(--live-dim);
+  color: var(--live);
+}
+@media (prefers-color-scheme: light) {
+  .badge-pending-sync { color: #0369a1; }
+}
+body.light-theme .badge-pending-sync { color: #0369a1; }
 
 .empty-hint {
   color: var(--text-faint);
@@ -456,7 +764,7 @@ html, body {
   line-height: 1.5;
 }
 
-/* ---------- Form Controls ---------- */
+/* ---------- Form controls ---------- */
 .form-row {
   display: flex;
   flex-direction: column;
@@ -472,7 +780,8 @@ html, body {
   color: var(--text-muted);
 }
 
-.form-row input[type="text"] {
+.form-row input[type="text"],
+.form-row input[type="email"] {
   font-family: inherit;
   font-size: 16px;
   padding: 12px 12px;
@@ -482,7 +791,8 @@ html, body {
   color: var(--text-main);
 }
 
-.form-row input[type="text"]:focus {
+.form-row input[type="text"]:focus,
+.form-row input[type="email"]:focus {
   outline: none;
   border-color: var(--live);
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
@@ -492,7 +802,7 @@ html, body {
   color: var(--text-faint);
 }
 
-/* Station picker layout (glove-friendly) */
+/* Chip pickers */
 .station-chip-group {
   display: flex;
   flex-wrap: wrap;
@@ -512,20 +822,51 @@ html, body {
   background: var(--surface-raised);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .station-chip.active {
   border-color: var(--live);
-  background: var(--live-dim);
+  background: rgba(14, 165, 233, 0.14);
   color: var(--live);
+}
+@media (prefers-color-scheme: light) {
+  .station-chip.active {
+    background: var(--live-dim);
+    color: #0284C7;
+  }
+}
+body.light-theme .station-chip.active {
+  background: var(--live-dim);
+  color: #0284C7;
 }
 
 .station-chip:active {
   transform: scale(0.96);
 }
 
-/* ---------- Action Buttons ---------- */
+.expected-uld-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.expected-uld-chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--info-dim);
+  color: var(--info);
+}
+@media (prefers-color-scheme: light) {
+  .expected-uld-chip { color: #0369a1; }
+}
+body.light-theme .expected-uld-chip { color: #0369a1; }
+
+/* ---------- Buttons ---------- */
 .btn {
   font-family: inherit;
   font-size: 15px;
@@ -535,7 +876,6 @@ html, body {
   border: none;
   cursor: pointer;
   width: 100%;
-  transition: transform 0.1s ease, background 0.15s ease;
 }
 
 .btn:active {
@@ -544,11 +884,20 @@ html, body {
 
 .btn-primary {
   background: var(--live);
-  color: #05070A; /* Ensures deep dark text contrast on cyan button across both themes */
+  color: #FFFFFF; /* Changed from dark tone to White for solid contrast against Cyan */
+  margin-top: 12px;
 }
 
-.btn-primary:active {
-  background: #0284C7; /* Darker cyan active feedback state */
+/* Specific button adjustment for light mode to stay highly readable under sun */
+@media (prefers-color-scheme: light) {
+  .btn-primary {
+    background: #0284C7;
+    color: #FFFFFF;
+  }
+}
+body.light-theme .btn-primary {
+  background: #0284C7;
+  color: #FFFFFF;
 }
 
 .btn-primary:disabled {
@@ -571,7 +920,7 @@ html, body {
   padding: 4px 0 0;
 }
 
-/* ---------- Toast Popups ---------- */
+/* ---------- Toast ---------- */
 .toast {
   position: fixed;
   left: 50%;
