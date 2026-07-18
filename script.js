@@ -1,28 +1,50 @@
 (function () {
   'use strict';
 
-  // Matches 3 letters + 5 digits + 2 letters, e.g. AKE12345AK
-  // Applied AFTER we strip every non-alphanumeric character, so it survives
-  // spaces, dashes, underscores, slashes between the groups (AKE 12345 AK, AKE-12345-AK, etc.)
-  const ULD_REGEX = /[A-Z]{3}\d{5}[A-Z]{2}/g;
-
   const OCR_INTERVAL_MS = 2500;
-  const DUPLICATE_WINDOW_MS = 10000;
+
+  // How many consecutive frames must produce the same code before it's
+  // treated as confirmed and auto-saved (mirrors "3 consecutive frames" from
+  // the multi-ULD scanner spec) — this filters out one-off misreads.
+  const STABLE_FRAMES_REQUIRED = 3;
+
+  // Auto-correction of common OCR letter/digit confusions is only trusted
+  // when Tesseract's own confidence for the frame is at least this high.
+  const CORRECTION_MIN_CONFIDENCE = 60;
+
+  // A ULD code is always 3 letters, 5 digits, 2 letters — used to decide,
+  // position by position, whether a misread character should be corrected
+  // as a letter or a digit.
+  const ULD_PATTERN_TYPES = ['L', 'L', 'L', 'D', 'D', 'D', 'D', 'D', 'L', 'L'];
+  const ULD_CODE_LENGTH = ULD_PATTERN_TYPES.length;
+
+  // digit -> letter it's commonly confused with, and vice versa
+  const LETTER_FIX = { '0': 'O', '1': 'I', '5': 'S', '8': 'B', '2': 'Z' };
+  const DIGIT_FIX = { 'O': '0', 'I': '1', 'L': '1', 'S': '5', 'B': '8', 'Z': '2' };
 
   // Matches the CSS .scan-frame { inset: 4%; } so we only OCR what the user sees framed
   const SCAN_FRAME_INSET_RATIO = 0.04;
 
   // Flip to true while debugging to see exactly what Tesseract read, on-screen and in console
-  const DEBUG_OCR = true;
+  const DEBUG_OCR = false;
 
   const state = {
     stream: null,
     ocrRunning: false,
     ocrTimer: null,
-    lastDetectedUld: null,
-    lastDetectedTime: 0,
     ocrWorker: null,
-    workerReady: false
+    workerReady: false,
+    audioCtx: null,
+    // code -> consecutive-frame count, used to require stable reads before saving
+    candidateStreaks: new Map(),
+    // codes already submitted to the sheet this session
+    savedUlds: new Set(),
+    savedCount: 0,
+    // scans that have been detected/confirmed but not yet submitted — each is
+    // {id, uld, corrected} and shown as an editable row until Submit is pressed
+    pendingQueue: [],
+    nextEntryId: 1,
+    selectedStation: null
   };
 
   const dom = {
@@ -35,6 +57,10 @@
     detectionValue: document.getElementById('detection-value'),
     candidateChips: document.getElementById('candidate-chips'),
     lastSavedRow: document.getElementById('last-saved-row'),
+    sessionSavedCount: document.getElementById('session-saved-count'),
+    pendingQueueList: document.getElementById('pending-queue-list'),
+    pendingCount: document.getElementById('pending-count'),
+    submitQueueBtn: document.getElementById('submit-queue-btn'),
     stationSelect: document.getElementById('station-select'),
     userInput: document.getElementById('user-input'),
     connectionStatus: document.getElementById('connection-status'),
@@ -56,6 +82,8 @@
       startCamera();
     });
 
+    dom.submitQueueBtn.addEventListener('click', submitPendingQueue);
+
     dom.userInput.addEventListener('change', function () {
       try {
         localStorage.setItem('snapuld_operator', dom.userInput.value.trim());
@@ -71,12 +99,37 @@
   }
 
   function loadStations() {
+    const stations = ['KUL', 'PEN', 'BKI', 'KCH', 'JHB'];
+    let savedStation = null;
+    try {
+      savedStation = localStorage.getItem('snapuld_station');
+    } catch (e) {}
+
+    const initial = (savedStation && stations.indexOf(savedStation) !== -1) ? savedStation : stations[0];
+    state.selectedStation = initial;
+
     dom.stationSelect.innerHTML = '';
-    ['KUL', 'PEN', 'BKI', 'KCH', 'JHB'].forEach(function (code) {
-      const opt = document.createElement('option');
-      opt.value = code;
-      opt.textContent = code;
-      dom.stationSelect.appendChild(opt);
+    stations.forEach(function (code) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'station-chip' + (code === initial ? ' active' : '');
+      chip.textContent = code;
+      chip.setAttribute('aria-pressed', code === initial ? 'true' : 'false');
+
+      chip.addEventListener('click', function () {
+        state.selectedStation = code;
+        Array.from(dom.stationSelect.children).forEach(function (c) {
+          c.classList.remove('active');
+          c.setAttribute('aria-pressed', 'false');
+        });
+        chip.classList.add('active');
+        chip.setAttribute('aria-pressed', 'true');
+        try {
+          localStorage.setItem('snapuld_station', code);
+        } catch (e) {}
+      });
+
+      dom.stationSelect.appendChild(chip);
     });
   }
 
@@ -298,8 +351,8 @@
     setDetectionState('searching', 'Searching...');
     return getOcrWorker()
       .then(function (worker) {
-        return runRecognitionPass(worker, canvas, '7').then(function (text) {
-          if (text && text.trim().length > 0) return text;
+        return runRecognitionPass(worker, canvas, '7').then(function (res) {
+          if (res.text && res.text.trim().length > 0) return res;
           if (DEBUG_OCR) console.log('First pass empty, retrying with sparse-text mode...');
           return runRecognitionPass(worker, canvas, '11');
         });
@@ -317,10 +370,13 @@
       })
       .then(function (result) {
         const text = (result && result.data && result.data.text) ? result.data.text : '';
+        const confidence = (result && result.data && typeof result.data.confidence === 'number')
+          ? result.data.confidence
+          : 0;
         if (DEBUG_OCR) {
-          console.log('Raw OCR text (PSM ' + pageSegMode + '):', JSON.stringify(text));
+          console.log('Raw OCR text (PSM ' + pageSegMode + '):', JSON.stringify(text), 'confidence:', confidence);
         }
-        return text;
+        return { text: text, confidence: confidence };
       });
   }
 
@@ -351,53 +407,148 @@
     return state.ocrWorker;
   }
 
-  function handleOcrResult(rawText) {
-    const candidates = extractValidUldCandidates(rawText);
-
-    if (DEBUG_OCR) {
-      dom.detectionValue.textContent = rawText ? rawText.trim().slice(0, 40) : '(empty)';
-    }
+  function handleOcrResult(ocrResult) {
+    const rawText = ocrResult.text;
+    const confidence = ocrResult.confidence;
+    const candidates = extractValidUldCandidates(rawText, confidence);
 
     if (candidates.length === 0) {
+      if (DEBUG_OCR) {
+        dom.detectionValue.textContent = rawText ? rawText.trim().slice(0, 40) : '(empty)';
+      }
       setDetectionState('none', 'No ULD Found');
       renderCandidates([]);
+      state.candidateStreaks.clear();
       return;
     }
 
-    if (candidates.length === 1) {
-      setDetectionState('found', '\u2713 ULD Detected');
-      dom.detectionValue.textContent = candidates[0];
+    const seenThisFrame = new Set();
+    const confirmedThisFrame = [];
+
+    candidates.forEach(function (cand) {
+      seenThisFrame.add(cand.code);
+      if (isAlreadyTracked(cand.code)) return;
+
+      const streak = (state.candidateStreaks.get(cand.code) || 0) + 1;
+      state.candidateStreaks.set(cand.code, streak);
+
+      if (streak >= STABLE_FRAMES_REQUIRED) {
+        confirmedThisFrame.push(cand);
+      }
+    });
+
+    // Drop streaks for anything not read this frame, so an old misread
+    // doesn't keep counting toward stability once it stops appearing.
+    Array.from(state.candidateStreaks.keys()).forEach(function (code) {
+      if (!seenThisFrame.has(code)) {
+        state.candidateStreaks.delete(code);
+      }
+    });
+
+    confirmedThisFrame.forEach(function (cand) {
+      state.candidateStreaks.delete(cand.code);
+      addToPendingQueue(cand.code, cand.corrected);
+    });
+
+    const pending = candidates.filter(function (c) {
+      return !isAlreadyTracked(c.code);
+    });
+
+    if (pending.length === 0) {
+      if (confirmedThisFrame.length > 0) {
+        setDetectionState('found', '\u2713 Added to Pending List');
+      }
+      return;
+    }
+
+    if (pending.length === 1) {
+      const streak = state.candidateStreaks.get(pending[0].code) || STABLE_FRAMES_REQUIRED;
+      setDetectionState('searching', 'Stabilizing ' + Math.min(streak, STABLE_FRAMES_REQUIRED) + '/' + STABLE_FRAMES_REQUIRED + '...');
+      dom.detectionValue.textContent = pending[0].code + (pending[0].corrected ? ' (auto-corrected)' : '');
       renderCandidates([]);
-      attemptSave(candidates[0]);
       return;
     }
 
-    setDetectionState('found', '\u2713 Multiple ULDs Detected');
-    dom.detectionValue.textContent = candidates.join(' / ');
-    renderCandidates(candidates);
+    setDetectionState('searching', 'Multiple ULDs \u2013 stabilizing...');
+    dom.detectionValue.textContent = pending.map(function (c) { return c.code; }).join(' / ');
+    renderCandidates(pending);
   }
 
-  function extractValidUldCandidates(rawText) {
+  // A code counts as "tracked" once it's either already submitted this
+  // session, or already sitting in the pending queue awaiting Submit —
+  // either way we don't want it re-detected as a new candidate.
+  function isAlreadyTracked(code) {
+    if (state.savedUlds.has(code)) return true;
+    return state.pendingQueue.some(function (entry) { return entry.uld === code; });
+  }
+
+  // Tries to correct a single character against the type (letter/digit)
+  // expected at its position in the ULD pattern. Returns the corrected
+  // character, or null if it can't be resolved to a valid one.
+  function correctChar(ch, expectedType) {
+    if (expectedType === 'L') {
+      if (ch >= 'A' && ch <= 'Z') return { value: ch, corrected: false };
+      if (LETTER_FIX[ch]) return { value: LETTER_FIX[ch], corrected: true };
+      return null;
+    }
+    if (ch >= '0' && ch <= '9') return { value: ch, corrected: false };
+    if (DIGIT_FIX[ch]) return { value: DIGIT_FIX[ch], corrected: true };
+    return null;
+  }
+
+  // Attempts to interpret a fixed-length window as a ULD code, applying
+  // position-aware auto-correction (O<->0, I/L<->1, S<->5, B<->8, Z<->2).
+  function tryCorrectWindow(windowStr) {
+    let corrected = '';
+    let anyCorrection = false;
+
+    for (let i = 0; i < ULD_CODE_LENGTH; i++) {
+      const result = correctChar(windowStr[i], ULD_PATTERN_TYPES[i]);
+      if (!result) return null;
+      corrected += result.value;
+      if (result.corrected) anyCorrection = true;
+    }
+
+    return { code: corrected, corrected: anyCorrection };
+  }
+
+  function extractValidUldCandidates(rawText, confidence) {
     if (!rawText) return [];
     const upperText = rawText.toUpperCase();
     // Strip everything except letters/digits so spaces, dashes, underscores,
     // slashes, and line breaks between the three groups no longer block a match.
     const cleanedText = upperText.replace(/[^A-Z0-9]/g, '');
-    const matches = cleanedText.match(ULD_REGEX);
-    if (!matches) return [];
-    return matches.filter(function (val, idx) {
-      return matches.indexOf(val) === idx;
+
+    const found = new Map(); // code -> corrected(boolean)
+
+    for (let start = 0; start <= cleanedText.length - ULD_CODE_LENGTH; start++) {
+      const windowStr = cleanedText.substr(start, ULD_CODE_LENGTH);
+      const result = tryCorrectWindow(windowStr);
+      if (!result) continue;
+
+      // Only trust auto-corrected reads when the OCR pass itself was confident;
+      // an exact match (no correction needed) is always accepted.
+      if (result.corrected && confidence < CORRECTION_MIN_CONFIDENCE) continue;
+
+      if (!found.has(result.code) || found.get(result.code)) {
+        found.set(result.code, result.corrected);
+      }
+    }
+
+    return Array.from(found.entries()).map(function (entry) {
+      return { code: entry[0], corrected: entry[1] };
     });
   }
 
   function renderCandidates(candidates) {
     dom.candidateChips.innerHTML = '';
-    candidates.forEach(function (code) {
+    candidates.forEach(function (cand) {
       const chip = document.createElement('div');
       chip.className = 'candidate-chip';
-      chip.textContent = code;
+      chip.textContent = cand.code + (cand.corrected ? ' \u270e' : '');
+      chip.title = cand.corrected ? 'Auto-corrected reading — tap to add to pending list' : 'Tap to add to pending list';
       chip.addEventListener('click', function () {
-        attemptSave(code, true);
+        addToPendingQueue(cand.code, cand.corrected);
       });
       dom.candidateChips.appendChild(chip);
     });
@@ -413,45 +564,148 @@
 
   function setScanningIndicator(isScanning) {
     dom.scanningBadge.style.display = isScanning ? 'flex' : 'none';
-    dom.scanningBadgeText.textContent = isScanning ? 'Scanning...' : 'Idle';
+    dom.scanningBadgeText.textContent = isScanning ? 'Scanning' : 'Idle';
   }
 
-  function isDuplicate(uld) {
-    const now = Date.now();
-    if (state.lastDetectedUld === uld && (now - state.lastDetectedTime) < DUPLICATE_WINDOW_MS) {
-      return true;
-    }
-    return false;
-  }
+  function addToPendingQueue(code, corrected) {
+    if (isAlreadyTracked(code)) return;
 
-  function markDetected(uld) {
-    state.lastDetectedUld = uld;
-    state.lastDetectedTime = Date.now();
-  }
-
-  function attemptSave(uld, manualPick) {
-    if (!manualPick && isDuplicate(uld)) {
-      return;
-    }
-
-    markDetected(uld);
-    renderCandidates([]);
-
-    const record = {
-      uld: uld,
-      station: dom.stationSelect.value || '',
-      user: (dom.userInput.value || '').trim() || 'Unknown',
-      timestamp: new Date().toISOString()
+    const entry = {
+      id: state.nextEntryId++,
+      uld: code,
+      corrected: !!corrected
     };
+    state.pendingQueue.push(entry);
+    renderPendingQueue();
+    playBeep();
 
-    setConnectionStatus(true, 'Saving...');
+    setDetectionState('found', '\u2713 Added to Pending List');
+    dom.detectionValue.textContent = code;
+    renderCandidates([]);
+  }
+
+  function renderPendingQueue() {
+    dom.pendingQueueList.innerHTML = '';
+
+    if (state.pendingQueue.length === 0) {
+      const hint = document.createElement('span');
+      hint.className = 'empty-hint';
+      hint.textContent = 'No scans queued yet.';
+      dom.pendingQueueList.appendChild(hint);
+    } else {
+      state.pendingQueue.forEach(function (entry) {
+        dom.pendingQueueList.appendChild(buildPendingRow(entry));
+      });
+    }
+
+    dom.pendingCount.textContent = state.pendingQueue.length + ' pending';
+    dom.submitQueueBtn.disabled = state.pendingQueue.length === 0;
+  }
+
+  // Builds one editable row: a text input holding the ULD code (correctable
+  // by hand before submit) plus a remove button to discard a bad read.
+  function buildPendingRow(entry) {
+    const row = document.createElement('div');
+    row.className = 'pending-row';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'pending-input';
+    input.value = entry.uld;
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.addEventListener('input', function () {
+      entry.uld = input.value;
+    });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'pending-remove-btn';
+    removeBtn.setAttribute('aria-label', 'Remove from pending list');
+    removeBtn.textContent = '\u2715';
+    removeBtn.addEventListener('click', function () {
+      state.pendingQueue = state.pendingQueue.filter(function (e) { return e.id !== entry.id; });
+      renderPendingQueue();
+    });
+
+    row.appendChild(input);
+    row.appendChild(removeBtn);
+    return row;
+  }
+
+  // Commits every row currently in the pending queue to the (simulated)
+  // sheet. Whatever text is in each editable field at this moment is what
+  // gets saved, so hand corrections made before pressing Submit are respected.
+  function submitPendingQueue() {
+    if (state.pendingQueue.length === 0) return;
+
+    const station = state.selectedStation || '';
+    const operator = (dom.userInput.value || '').trim() || 'Unknown';
+    const timestamp = new Date().toISOString();
+
+    const toSubmit = state.pendingQueue
+      .map(function (entry) { return (entry.uld || '').trim().toUpperCase(); })
+      .filter(function (code) { return code.length > 0; });
+
+    if (toSubmit.length === 0) return;
+
+    setConnectionStatus(true, 'Submitting...');
+    dom.submitQueueBtn.disabled = true;
 
     // SIMULASI SIMPAN (Kerana GitHub Pages tiada backend DB)
     setTimeout(function () {
+      toSubmit.forEach(function (code) {
+        state.savedUlds.add(code);
+      });
+
+      updateLastSaved({
+        uld: toSubmit[toSubmit.length - 1],
+        station: station,
+        user: operator,
+        timestamp: timestamp
+      });
+
+      state.savedCount += toSubmit.length;
+      updateSessionSavedCount();
+
+      state.pendingQueue = [];
+      renderPendingQueue();
+
       setConnectionStatus(true, 'Camera Ready');
-      showToast('Imbasan Dikesan (Simulasi)', 'success');
-      updateLastSaved(record);
+      showToast(toSubmit.length + (toSubmit.length > 1 ? ' ULDs Disimpan' : ' ULD Disimpan') + ' (Simulasi)', 'success');
     }, 800);
+  }
+
+  function updateSessionSavedCount() {
+    if (!dom.sessionSavedCount) return;
+    dom.sessionSavedCount.textContent = state.savedCount + ' saved';
+  }
+
+  // Short confirmation beep on a stable/confirmed detection. Uses the Web
+  // Audio API directly so no audio file needs to be bundled or hosted.
+  function playBeep() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!state.audioCtx) state.audioCtx = new AudioCtx();
+      const ctx = state.audioCtx;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+    } catch (e) {
+      console.warn('Beep failed:', e);
+    }
   }
 
   function updateLastSaved(record) {
