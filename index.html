@@ -2,64 +2,100 @@
 <html lang="ms">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>SnapULD Vision</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="app">
-    <div class="app-header">
-      <div>
-        <h1>SnapULD Vision</h1>
-        <div class="subtitle">Camera-based ULD scanning</div>
+
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+            <path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M4 8.5 12 13l8-4.5M12 13v7" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div>
+          <h1>SnapULD Vision</h1>
+          <p class="subtitle">Camera-based ULD scanning</p>
+        </div>
       </div>
       <div class="status-pill" id="connection-status">
         <span class="dot"></span>
         <span id="connection-status-text">Camera Ready</span>
       </div>
-    </div>
+    </header>
 
-    <div class="card">
+    <section class="card camera-card">
       <p class="card-title">Live Camera</p>
+
       <div class="camera-wrap">
         <video id="camera-video" autoplay playsinline muted></video>
         <canvas id="capture-canvas"></canvas>
+
         <div class="scan-frame"></div>
+
         <div class="scanning-badge" id="scanning-badge">
-          <span class="spinner"></span>
-          <span id="scanning-badge-text">Scanning...</span>
+          <span class="live-dot"></span>
+          <span id="scanning-badge-text">Scanning</span>
         </div>
+
         <div class="camera-overlay-msg" id="camera-overlay-msg"></div>
       </div>
 
       <div class="detection-result">
-        <div class="detection-status" id="detection-status">Searching...</div>
+        <div class="detection-status" id="detection-status">Point camera at a ULD tag</div>
         <div class="detection-value" id="detection-value">&nbsp;</div>
         <div class="candidate-chips" id="candidate-chips"></div>
       </div>
-    </div>
+    </section>
 
-    <div class="card">
-      <p class="card-title">Last Saved ULD</p>
+    <section class="card">
+      <div class="card-title-row">
+        <p class="card-title">Pending Scans</p>
+        <span class="session-count" id="pending-count">0 pending</span>
+      </div>
+      <p class="card-hint">Check each code before submitting — tap a field to fix a misread character.</p>
+      <div class="pending-list" id="pending-queue-list">
+        <span class="empty-hint">No scans queued yet. Detected ULDs will appear here.</span>
+      </div>
+      <button class="btn btn-primary" id="submit-queue-btn" type="button" disabled>
+        Submit to Sheet
+      </button>
+    </section>
+
+    <section class="card">
+      <div class="card-title-row">
+        <p class="card-title">Last Saved ULD</p>
+        <span class="session-count" id="session-saved-count">0 saved</span>
+      </div>
       <div class="last-saved-row" id="last-saved-row">
-        <span class="empty-hint">No scans saved yet this session.</span>
+        <span class="empty-hint">Nothing submitted yet this session.</span>
       </div>
-    </div>
+    </section>
 
-    <div class="card">
+    <section class="card">
       <p class="card-title">Scan Details</p>
+
       <div class="form-row">
-        <label for="station-select">Station</label>
-        <select id="station-select"></select>
+        <label id="station-label">Station</label>
+        <div class="station-chip-group" id="station-select" role="group" aria-labelledby="station-label"></div>
       </div>
+
       <div class="form-row">
         <label for="user-input">Operator Name</label>
         <input type="text" id="user-input" placeholder="e.g. Ikwan" autocomplete="off">
       </div>
+
       <button class="btn btn-secondary" id="restart-camera-btn" type="button">
         Restart Camera
       </button>
-    </div>
+    </section>
 
     <footer class="app-footer">SnapULD Vision &middot; MVP &middot; GitHub Pages</footer>
   </div>
