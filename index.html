@@ -34,53 +34,51 @@
       </div>
     </header>
 
-    <!-- ============ HOME ============ -->
+    <!-- ============ HOME (Modules + Scan Details) ============ -->
     <main class="view" id="view-home">
-      <p class="card-hint home-intro">Select a module to continue.</p>
+      <div class="modules-section">
+        <p class="card-title modules-title">Modules</p>
+        <p class="card-hint modules-hint" id="modules-hint">Fill in email, station &amp; flight type to unlock.</p>
 
-      <nav class="nav-grid">
-        <button class="nav-card" id="nav-scanner" type="button">
-          <span class="nav-icon">📷</span>
-          <span class="nav-text">
-            <span class="nav-title">ULD Scanner</span>
-            <span class="nav-desc">Live camera scan &amp; log ULDs</span>
-          </span>
-          <span class="nav-chevron">›</span>
-        </button>
+        <nav class="nav-grid">
+          <button class="nav-card" id="nav-scanner" type="button" disabled>
+            <span class="nav-icon">📷</span>
+            <span class="nav-text">
+              <span class="nav-title">ULD Scanner</span>
+              <span class="nav-desc">Live camera scan &amp; log ULDs</span>
+            </span>
+            <span class="nav-chevron">›</span>
+          </button>
 
-        <button class="nav-card" id="nav-dashboard" type="button">
-          <span class="nav-icon">📊</span>
-          <span class="nav-text">
-            <span class="nav-title">Dashboard</span>
-            <span class="nav-desc">Scan analytics &amp; trends</span>
-          </span>
-          <span class="nav-chevron">›</span>
-        </button>
+          <button class="nav-card" id="nav-dashboard" type="button" disabled>
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">
+              <span class="nav-title">Dashboard</span>
+              <span class="nav-desc">Scan analytics &amp; trends</span>
+            </span>
+            <span class="nav-chevron">›</span>
+          </button>
 
-        <button class="nav-card" id="nav-history" type="button">
-          <span class="nav-icon">📜</span>
-          <span class="nav-text">
-            <span class="nav-title">Scan History</span>
-            <span class="nav-desc">Search, filter &amp; export records</span>
-          </span>
-          <span class="nav-chevron">›</span>
-        </button>
+          <button class="nav-card" id="nav-history" type="button" disabled>
+            <span class="nav-icon">📜</span>
+            <span class="nav-text">
+              <span class="nav-title">Scan History</span>
+              <span class="nav-desc">Search, filter &amp; export records</span>
+            </span>
+            <span class="nav-chevron">›</span>
+          </button>
 
-        <button class="nav-card nav-card-future" id="nav-damage" type="button">
-          <span class="nav-icon">🛠️</span>
-          <span class="nav-text">
-            <span class="nav-title">AI Damage Detection <span class="future-badge">Future</span></span>
-            <span class="nav-desc">Visual inspection module</span>
-          </span>
-          <span class="nav-chevron">›</span>
-        </button>
-      </nav>
+          <button class="nav-card nav-card-future" id="nav-damage" type="button" disabled>
+            <span class="nav-icon">🛠️</span>
+            <span class="nav-text">
+              <span class="nav-title">AI Damage Detection <span class="future-badge">Future</span></span>
+              <span class="nav-desc">Visual inspection module</span>
+            </span>
+            <span class="nav-chevron">›</span>
+          </button>
+        </nav>
+      </div>
 
-      <footer class="app-footer">SnapULD Vision &middot; MVP &middot; GitHub Pages</footer>
-    </main>
-
-    <!-- ============ SETUP ============ -->
-    <main class="view" id="view-setup" hidden>
       <section class="card">
         <p class="card-title">Operator</p>
         <div class="form-row">
@@ -101,9 +99,7 @@
         <p class="card-hint" id="expected-uld-hint">Select a flight type to see expected ULD prefixes.</p>
       </section>
 
-      <button class="btn btn-primary" id="start-scan-btn" type="button" disabled>
-        Start Scanning
-      </button>
+      <footer class="app-footer">SnapULD Vision &middot; MVP &middot; GitHub Pages</footer>
     </main>
 
     <!-- ============ SCANNER ============ -->
@@ -154,6 +150,7 @@
           <p class="card-title">Scanned ULDs</p>
           <span class="session-count" id="session-saved-count">0 scanned</span>
         </div>
+        <div class="type-count-chips" id="type-count-chips"></div>
         <div class="scanned-list" id="scanned-list">
           <span class="empty-hint">Nothing submitted yet this session.</span>
         </div>
@@ -173,11 +170,45 @@
       </section>
     </main>
 
-    <!-- ============ SCAN HISTORY (placeholder) ============ -->
+    <!-- ============ SCAN HISTORY ============ -->
     <main class="view" id="view-history" hidden>
-      <section class="card placeholder-card">
-        <p class="card-title">Coming Next</p>
-        <p class="card-hint">A full searchable, filterable, sortable scan log with CSV export and complete per-scan detail is next up.</p>
+      <section class="card">
+        <p class="card-title">Search &amp; Filter</p>
+        <div class="form-row">
+          <label for="history-search">Search ULD</label>
+          <input type="text" id="history-search" placeholder="e.g. AKE12345MH" autocomplete="off">
+        </div>
+
+        <div class="form-row">
+          <label>Station</label>
+          <div class="station-chip-group history-filter-group" id="history-station-filter"></div>
+        </div>
+
+        <div class="form-row">
+          <label>Flight Type</label>
+          <div class="station-chip-group history-filter-group" id="history-flight-filter"></div>
+        </div>
+
+        <div class="form-row">
+          <label for="history-sort">Sort</label>
+          <select id="history-sort" class="history-sort-select">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="uld-asc">ULD Code (A\u2013Z)</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title-row">
+          <p class="card-title">Records</p>
+          <span class="session-count" id="history-count">0 records</span>
+        </div>
+        <p class="card-hint">Tap a record to view full scan details.</p>
+        <div class="history-list" id="history-list">
+          <span class="empty-hint">No scans recorded yet.</span>
+        </div>
+        <button class="btn btn-secondary" id="export-csv-btn" type="button">Export CSV</button>
       </section>
     </main>
 
