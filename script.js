@@ -232,11 +232,10 @@
     });
 
     dom.usernameInput.addEventListener('input', function () {
-      state.setup.operator = dom.usernameInput.value.trim();
+      const value = dom.usernameInput.value.trim();
+      state.setup.operator = value;
+      try { localStorage.setItem('snapuld_operator', value); } catch (e) {}
       validateSetup();
-    });
-    dom.usernameInput.addEventListener('change', function () {
-      try { localStorage.setItem('snapuld_operator', dom.usernameInput.value.trim()); } catch (e) {}
     });
 
     renderExpectedUldChips(initialFlightType);
