@@ -1,4 +1,4 @@
-(function () {
+](function () {
   'use strict';
 
   const OCR_INTERVAL_MS = 2500;
@@ -51,7 +51,6 @@
 
   const VIEWS = {
     home: { title: 'SnapULD Vision', subtitle: 'AI ULD Operations Platform', showBack: false, showStatus: false },
-    setup: { title: 'Scan Details', subtitle: 'Set station, flight type & operator', showBack: true, showStatus: false },
     scanner: { title: 'ULD Scanner', subtitle: null, showBack: true, showStatus: true },
     dashboard: { title: 'Dashboard', subtitle: 'Operational analytics', showBack: true, showStatus: false },
     history: { title: 'Scan History', subtitle: 'All scan records', showBack: true, showStatus: false },
@@ -75,10 +74,17 @@
     savedCount: 0,
     pendingQueue: [],
     nextEntryId: 1,
-    // full session scan log, most recent first — each record carries the
-    // metadata captured at submit time plus a syncStatus flag
-    scannedLog: []
+    // per-session scan log, most recent first — resets on reload, drives the
+    // Scanner page's "Scanned ULDs" list and "X scanned" session count
+    scannedLog: [],
+    // full persisted history across sessions — drives the Scan History page
+    historyLog: [],
+
+    historyFilters: { search: '', station: 'ALL', flightType: 'ALL', sort: 'newest' }
   };
+
+  const HISTORY_LOG_STORAGE_KEY = 'snapuld_history_log';
+  const HISTORY_LOG_MAX_ENTRIES = 500;
 
   const dom = {
     headerBackBtn: document.getElementById('header-back-btn'),
@@ -89,7 +95,6 @@
 
     views: {
       home: document.getElementById('view-home'),
-      setup: document.getElementById('view-setup'),
       scanner: document.getElementById('view-scanner'),
       dashboard: document.getElementById('view-dashboard'),
       history: document.getElementById('view-history'),
@@ -106,7 +111,7 @@
     flightTypeSelect: document.getElementById('flight-type-select'),
     expectedUldChips: document.getElementById('expected-uld-chips'),
     expectedUldHint: document.getElementById('expected-uld-hint'),
-    startScanBtn: document.getElementById('start-scan-btn'),
+    modulesHint: document.getElementById('modules-hint'),
 
     contextStation: document.getElementById('context-station'),
     contextFlight: document.getElementById('context-flight'),
@@ -128,6 +133,15 @@
 
     scannedList: document.getElementById('scanned-list'),
     sessionSavedCount: document.getElementById('session-saved-count'),
+    typeCountChips: document.getElementById('type-count-chips'),
+
+    historySearch: document.getElementById('history-search'),
+    historyStationFilter: document.getElementById('history-station-filter'),
+    historyFlightFilter: document.getElementById('history-flight-filter'),
+    historySort: document.getElementById('history-sort'),
+    historyList: document.getElementById('history-list'),
+    historyCount: document.getElementById('history-count'),
+    exportCsvBtn: document.getElementById('export-csv-btn'),
 
     restartBtn: document.getElementById('restart-camera-btn'),
     toast: document.getElementById('toast')
@@ -136,7 +150,9 @@
   window.addEventListener('load', init);
 
   function init() {
+    loadHistoryLog();
     initSetupView();
+    initHistoryView();
     wireNav();
 
     window.addEventListener('online', handleConnectivityChange);
@@ -178,6 +194,10 @@
       updateContextBar();
       startCamera();
     }
+
+    if (name === 'history') {
+      renderHistoryList();
+    }
   }
 
   function buildScannerSubtitle() {
@@ -186,17 +206,28 @@
 
   function wireNav() {
     dom.navScanner.addEventListener('click', function () {
-      showView(isSetupComplete() ? 'scanner' : 'setup');
+      if (dom.navScanner.disabled) return;
+      showView('scanner');
     });
-    dom.navDashboard.addEventListener('click', function () { showView('dashboard'); });
-    dom.navHistory.addEventListener('click', function () { showView('history'); });
-    dom.navDamage.addEventListener('click', function () { showView('damage'); });
+    dom.navDashboard.addEventListener('click', function () {
+      if (dom.navDashboard.disabled) return;
+      showView('dashboard');
+    });
+    dom.navHistory.addEventListener('click', function () {
+      if (dom.navHistory.disabled) return;
+      showView('history');
+    });
+    dom.navDamage.addEventListener('click', function () {
+      if (dom.navDamage.disabled) return;
+      showView('damage');
+    });
     dom.headerBackBtn.addEventListener('click', function () { showView('home'); });
-    dom.editDetailsBtn.addEventListener('click', function () { showView('setup'); });
+    dom.editDetailsBtn.addEventListener('click', function () { showView('home'); });
   }
 
   function isSetupComplete() {
-    return !!(state.setup.operator && state.setup.station && state.setup.flightType);
+    const emailOk = /\S+@\S+\.\S+/.test(state.setup.operator || '');
+    return !!(emailOk && state.setup.station && state.setup.flightType);
   }
 
   // ================= Setup view =================
@@ -240,12 +271,6 @@
 
     renderExpectedUldChips(initialFlightType);
     validateSetup();
-
-    dom.startScanBtn.addEventListener('click', function () {
-      if (dom.startScanBtn.disabled) return;
-      updateContextBar();
-      showView('scanner');
-    });
   }
 
   function buildChipGroup(container, options, initial, onSelect) {
@@ -286,14 +311,238 @@
   }
 
   function validateSetup() {
-    const emailOk = /\S+@\S+\.\S+/.test(state.setup.operator || '');
-    dom.startScanBtn.disabled = !(emailOk && state.setup.station && state.setup.flightType);
+    const complete = isSetupComplete();
+
+    [dom.navScanner, dom.navDashboard, dom.navHistory, dom.navDamage].forEach(function (btn) {
+      btn.disabled = !complete;
+    });
+
+    dom.modulesHint.textContent = complete
+      ? 'Choose a module to continue.'
+      : 'Fill in email, station & flight type to unlock.';
   }
 
   function updateContextBar() {
     dom.contextStation.textContent = state.setup.station || '—';
     dom.contextFlight.textContent = state.setup.flightType || '—';
     dom.contextOperator.textContent = state.setup.operator || '—';
+  }
+
+  // ================= Scan History =================
+
+  // History persists across sessions/reloads via localStorage — unlike
+  // scannedLog (Scanner page, resets per session), this is the permanent
+  // archive the Scan History page reads from.
+  function loadHistoryLog() {
+    try {
+      const raw = localStorage.getItem(HISTORY_LOG_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) state.historyLog = parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to load scan history:', e);
+    }
+  }
+
+  function persistHistoryLog() {
+    try {
+      if (state.historyLog.length > HISTORY_LOG_MAX_ENTRIES) {
+        state.historyLog = state.historyLog.slice(0, HISTORY_LOG_MAX_ENTRIES);
+      }
+      localStorage.setItem(HISTORY_LOG_STORAGE_KEY, JSON.stringify(state.historyLog));
+    } catch (e) {
+      console.warn('Failed to persist scan history:', e);
+    }
+  }
+
+  function initHistoryView() {
+    buildChipGroup(dom.historyStationFilter, ['ALL'].concat(STATIONS), 'ALL', function (value) {
+      state.historyFilters.station = value;
+      renderHistoryList();
+    });
+    buildChipGroup(dom.historyFlightFilter, ['ALL'].concat(FLIGHT_TYPES), 'ALL', function (value) {
+      state.historyFilters.flightType = value;
+      renderHistoryList();
+    });
+
+    dom.historySearch.addEventListener('input', function () {
+      state.historyFilters.search = dom.historySearch.value.trim().toUpperCase();
+      renderHistoryList();
+    });
+
+    dom.historySort.addEventListener('change', function () {
+      state.historyFilters.sort = dom.historySort.value;
+      renderHistoryList();
+    });
+
+    dom.exportCsvBtn.addEventListener('click', exportHistoryCsv);
+  }
+
+  function getFilteredHistory() {
+    const f = state.historyFilters;
+    let list = state.historyLog.filter(function (r) {
+      if (f.search && r.uld.indexOf(f.search) === -1) return false;
+      if (f.station !== 'ALL' && r.station !== f.station) return false;
+      if (f.flightType !== 'ALL' && r.flightType !== f.flightType) return false;
+      return true;
+    });
+
+    list = list.slice();
+    if (f.sort === 'oldest') {
+      list.reverse();
+    } else if (f.sort === 'uld-asc') {
+      list.sort(function (a, b) { return a.uld.localeCompare(b.uld); });
+    }
+    // 'newest' matches scannedLog's natural order (unshift = most recent first)
+
+    return list;
+  }
+
+  function renderHistoryList() {
+    const list = getFilteredHistory();
+    dom.historyList.innerHTML = '';
+    dom.historyCount.textContent = list.length + (list.length === 1 ? ' record' : ' records');
+
+    if (list.length === 0) {
+      const hint = document.createElement('span');
+      hint.className = 'empty-hint';
+      hint.textContent = state.historyLog.length === 0
+        ? 'No scans recorded yet.'
+        : 'No records match your search/filter.';
+      dom.historyList.appendChild(hint);
+      return;
+    }
+
+    list.forEach(function (record) {
+      dom.historyList.appendChild(buildHistoryRow(record));
+    });
+  }
+
+  function buildHistoryRow(record) {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+
+    const summary = document.createElement('div');
+    summary.className = 'history-row-summary';
+
+    const main = document.createElement('div');
+    main.className = 'scanned-main';
+
+    const uldLine = document.createElement('span');
+    uldLine.className = 'scanned-uld';
+    uldLine.textContent = record.uld;
+
+    const subLine = document.createElement('span');
+    subLine.className = 'scanned-sub';
+    subLine.textContent = record.type + ' \u00B7 ' + record.station + ' \u00B7 ' + record.flightType + ' \u00B7 ' + formatTime(record.timestamp);
+
+    main.appendChild(uldLine);
+    main.appendChild(subLine);
+
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + (record.syncStatus === 'synced' ? 'badge-synced' : 'badge-pending-sync');
+    badge.textContent = record.syncStatus === 'synced' ? 'Synced' : 'Pending Sync';
+
+    summary.appendChild(main);
+    summary.appendChild(badge);
+
+    const detail = document.createElement('div');
+    detail.className = 'history-detail';
+    detail.appendChild(buildHistoryDetailGrid(record));
+
+    summary.addEventListener('click', function () {
+      detail.classList.toggle('open');
+    });
+
+    row.appendChild(summary);
+    row.appendChild(detail);
+    return row;
+  }
+
+  function buildHistoryDetailGrid(record) {
+    const grid = document.createElement('div');
+    grid.className = 'history-detail-grid';
+
+    const fields = [
+      ['ULD Code', record.uld],
+      ['Type', record.type],
+      ['Expected for Flight', record.expectedMatch === false ? 'No \u2013 unexpected type' : 'Yes'],
+      ['Station', record.station],
+      ['Flight Type', record.flightType],
+      ['Operator', record.operator],
+      ['Timestamp', new Date(record.timestamp).toLocaleString()],
+      ['Confidence', typeof record.confidence === 'number' ? record.confidence + '%' : '\u2014'],
+      ['Location (GPS)', record.gps || 'Unavailable'],
+      ['Device', record.device],
+      ['Sync Status', record.syncStatus === 'synced' ? 'Synced' : 'Pending Sync']
+    ];
+
+    fields.forEach(function (pair) {
+      const label = document.createElement('span');
+      label.className = 'history-detail-label';
+      label.textContent = pair[0];
+
+      const value = document.createElement('span');
+      value.className = 'history-detail-value';
+      value.textContent = pair[1];
+
+      grid.appendChild(label);
+      grid.appendChild(value);
+    });
+
+    return grid;
+  }
+
+  function csvEscape(value) {
+    const str = String(value === undefined || value === null ? '' : value);
+    if (/[",\n]/.test(str)) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  }
+
+  function exportHistoryCsv() {
+    const list = getFilteredHistory();
+    if (list.length === 0) {
+      showToast('No records to export', 'info');
+      return;
+    }
+
+    const headers = [
+      'ULD Code', 'Type', 'Expected For Flight', 'Station', 'Flight Type',
+      'Operator', 'Timestamp', 'Confidence (%)', 'Location (GPS)', 'Device', 'Sync Status'
+    ];
+
+    const rows = list.map(function (r) {
+      return [
+        r.uld,
+        r.type,
+        r.expectedMatch === false ? 'No' : 'Yes',
+        r.station,
+        r.flightType,
+        r.operator,
+        r.timestamp,
+        typeof r.confidence === 'number' ? r.confidence : '',
+        r.gps || 'Unavailable',
+        r.device,
+        r.syncStatus
+      ].map(csvEscape).join(',');
+    });
+
+    const csv = headers.map(csvEscape).join(',') + '\n' + rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'snapuld-scan-history-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast(list.length + ' record' + (list.length > 1 ? 's' : '') + ' exported', 'success');
   }
 
   // ================= Connectivity / offline sync =================
@@ -314,7 +563,9 @@
     const pending = state.scannedLog.filter(function (r) { return r.syncStatus === 'pending'; });
     if (pending.length === 0) return;
     pending.forEach(function (r) { r.syncStatus = 'synced'; });
+    persistHistoryLog();
     renderScannedList();
+    if (state.currentView === 'history') renderHistoryList();
     showToast(pending.length + (pending.length > 1 ? ' records synced' : ' record synced'), 'success');
   }
 
@@ -860,7 +1111,7 @@
           const typeInfo = ULD_TYPE_INFO[prefix];
           const expectedList = EXPECTED_PREFIXES[flightType] || [];
 
-          state.scannedLog.unshift({
+          const record = {
             uld: item.uld,
             type: typeInfo ? typeInfo.label : 'Unknown',
             expectedMatch: expectedList.indexOf(prefix) !== -1,
@@ -872,12 +1123,19 @@
             gps: gps,
             device: device,
             syncStatus: online ? 'synced' : 'pending'
-          });
+          };
+
+          // Same record object goes into both: scannedLog is this session's
+          // view (resets on reload), historyLog is the permanent archive.
+          state.scannedLog.unshift(record);
+          state.historyLog.unshift(record);
         });
 
+        persistHistoryLog();
         state.savedCount += toSubmit.length;
         updateSessionSavedCount();
         renderScannedList();
+        if (state.currentView === 'history') renderHistoryList();
 
         state.pendingQueue = [];
         renderPendingQueue();
@@ -928,6 +1186,7 @@
 
   function renderScannedList() {
     dom.scannedList.innerHTML = '';
+    renderTypeCounts();
 
     if (state.scannedLog.length === 0) {
       const hint = document.createElement('span');
@@ -940,6 +1199,28 @@
     state.scannedLog.forEach(function (record) {
       dom.scannedList.appendChild(buildScannedRow(record));
     });
+  }
+
+  // Tally scanned ULDs by type this session (e.g. "LD3 Container: 3") so
+  // ground staff can see the load-type breakdown at a glance, not just a
+  // total count.
+  function renderTypeCounts() {
+    dom.typeCountChips.innerHTML = '';
+    if (state.scannedLog.length === 0) return;
+
+    const counts = new Map();
+    state.scannedLog.forEach(function (record) {
+      counts.set(record.type, (counts.get(record.type) || 0) + 1);
+    });
+
+    Array.from(counts.entries())
+      .sort(function (a, b) { return b[1] - a[1]; })
+      .forEach(function (entry) {
+        const chip = document.createElement('span');
+        chip.className = 'type-count-chip';
+        chip.innerHTML = entry[0] + ' <span class="count">' + entry[1] + '</span>';
+        dom.typeCountChips.appendChild(chip);
+      });
   }
 
   function buildScannedRow(record) {
@@ -956,6 +1237,7 @@
     const subLine = document.createElement('span');
     subLine.className = 'scanned-sub';
     subLine.textContent = record.type + ' \u00B7 ' + formatTime(record.timestamp) +
+      ' \u00B7 ' + (record.gps || 'GPS unavailable') +
       (record.expectedMatch === false ? ' \u00B7 Unexpected type' : '');
 
     main.appendChild(uldLine);
