@@ -1,5 +1,5 @@
 :root {
-  /* Surfaces */
+  /* Surfaces (Dark Theme Default) */
   --bg: #10141B;
   --surface: #1A212C;
   --surface-raised: #212938;
@@ -11,14 +11,15 @@
   --text-muted: #8B96A8;
   --text-faint: #5B6577;
 
-  /* Status language: amber = live/in-progress, teal = confirmed/saved, red = stop/remove */
-  --live: #FFB020;
-  --live-dim: #8A5E17;
+  /* Status language: cyan = live/scanning, teal = confirmed/saved, red = stop/remove */
+  --live: #0EA5E9;       /* Cyber Cyan / Electric Teal */
+  --live-dim: #073E5D;   /* Darker hue for backgrounds/borders */
   --confirmed: #34D399;
   --confirmed-dim: #1C4F41;
   --danger: #F2545B;
   --danger-dim: #4A2226;
 
+  /* Radii & Layout specs */
   --radius-lg: 18px;
   --radius-md: 12px;
   --radius-sm: 9px;
@@ -27,6 +28,43 @@
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, Menlo, monospace;
 }
 
+/* ---------- ☀️ Sokongan Mod Cerah (Light Mode) untuk Kawasan Terbuka (On-Ramp) ---------- */
+@media (prefers-color-scheme: light) {
+  :root {
+    /* High-contrast, glare-resistant surfaces for outdoor sunlight usage */
+    --bg: #F4F6F9;
+    --surface: #FFFFFF;
+    --surface-raised: #EAEFF5;
+    --border: #C2D1E5;
+    --border-soft: #DFE6F0;
+
+    /* High-contrast text fields */
+    --text-main: #0F172A;
+    --text-muted: #475569;
+    --text-faint: #94A3B8;
+
+    /* Light mode optimized states */
+    --live: #0284C7;       /* Slightly deeper cyan for perfect readability against light surfaces */
+    --live-dim: #E0F2FE;   /* Soft luminous cyan background */
+    --confirmed: #059669;
+    --confirmed-dim: #D1FAE5;
+    --danger: #DC2626;
+    --danger-dim: #FEE2E2;
+  }
+
+  /* Viewfinder camera dark box optimization when outdoor */
+  .camera-wrap {
+    background: #000000 !important;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  }
+
+  .scanning-badge {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-color: var(--live) !important;
+  }
+}
+
+/* ---------- Global Resets ---------- */
 * { box-sizing: border-box; }
 
 html, body {
@@ -36,6 +74,7 @@ html, body {
   color: var(--text-main);
   font-family: var(--font-ui);
   -webkit-tap-highlight-color: transparent;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 .app {
@@ -69,7 +108,7 @@ html, body {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: rgba(255, 176, 32, 0.12);
+  background: var(--live-dim);
   color: var(--live);
   flex-shrink: 0;
 }
@@ -94,7 +133,7 @@ html, body {
   gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(52, 211, 153, 0.12);
+  background: var(--confirmed-dim);
   border: 1px solid rgba(52, 211, 153, 0.28);
   color: var(--confirmed);
   font-size: 12px;
@@ -103,7 +142,7 @@ html, body {
 }
 
 .status-pill.offline {
-  background: rgba(242, 84, 91, 0.12);
+  background: var(--danger-dim);
   border-color: rgba(242, 84, 91, 0.3);
   color: var(--danger);
 }
@@ -121,6 +160,7 @@ html, body {
   border-radius: var(--radius-lg);
   padding: 16px;
   border: 1px solid var(--border-soft);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .card-title {
@@ -154,13 +194,13 @@ html, body {
   font-size: 11px;
   font-weight: 700;
   color: var(--live);
-  background: rgba(255, 176, 32, 0.12);
+  background: var(--live-dim);
   padding: 4px 10px;
   border-radius: 999px;
   white-space: nowrap;
 }
 
-/* ---------- Camera / viewfinder ---------- */
+/* ---------- Camera / Viewfinder ---------- */
 .camera-card {
   padding-bottom: 14px;
 }
@@ -188,7 +228,7 @@ html, body {
 .scan-frame {
   position: absolute;
   inset: 4%;
-  border: 1.5px solid rgba(255, 176, 32, 0.35);
+  border: 1.5px solid rgba(14, 165, 233, 0.35);
   border-radius: 14px;
   pointer-events: none;
 }
@@ -223,7 +263,7 @@ html, body {
   left: 10px;
   background: rgba(16, 20, 27, 0.82);
   backdrop-filter: blur(2px);
-  border: 1px solid rgba(255, 176, 32, 0.3);
+  border: 1px solid rgba(14, 165, 233, 0.3);
   color: var(--live);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -273,7 +313,7 @@ html, body {
   display: flex;
 }
 
-/* ---------- Detection readout (signature: gate-board style mono readout) ---------- */
+/* ---------- Detection Readout ---------- */
 .detection-result {
   margin-top: 14px;
   display: flex;
@@ -300,7 +340,7 @@ html, body {
   font-weight: 600;
   letter-spacing: 0.12em;
   color: var(--live);
-  background: #05070A;
+  background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
@@ -319,7 +359,7 @@ html, body {
 .candidate-chip {
   background: var(--surface-raised);
   color: var(--live);
-  border: 1px solid rgba(255, 176, 32, 0.35);
+  border: 1px solid rgba(14, 165, 233, 0.35);
   padding: 9px 14px;
   border-radius: 999px;
   font-family: var(--font-mono);
@@ -333,7 +373,7 @@ html, body {
   transform: scale(0.97);
 }
 
-/* ---------- Pending queue ---------- */
+/* ---------- Pending Queue ---------- */
 .pending-list {
   display: flex;
   flex-direction: column;
@@ -364,7 +404,7 @@ html, body {
 .pending-input:focus {
   outline: none;
   border-color: var(--live);
-  box-shadow: 0 0 0 3px rgba(255, 176, 32, 0.18);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
 }
 
 .pending-remove-btn {
@@ -384,7 +424,7 @@ html, body {
   transform: scale(0.95);
 }
 
-/* ---------- Last saved ---------- */
+/* ---------- Last Saved ---------- */
 .last-saved-row {
   display: flex;
   align-items: center;
@@ -416,7 +456,7 @@ html, body {
   line-height: 1.5;
 }
 
-/* ---------- Form controls ---------- */
+/* ---------- Form Controls ---------- */
 .form-row {
   display: flex;
   flex-direction: column;
@@ -445,15 +485,14 @@ html, body {
 .form-row input[type="text"]:focus {
   outline: none;
   border-color: var(--live);
-  box-shadow: 0 0 0 3px rgba(255, 176, 32, 0.18);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
 }
 
 .form-row input::placeholder {
   color: var(--text-faint);
 }
 
-/* Station picker: large tap targets instead of a native dropdown, easier to
-   hit reliably with gloves or in a hurry on the ramp. */
+/* Station picker layout (glove-friendly) */
 .station-chip-group {
   display: flex;
   flex-wrap: wrap;
@@ -473,11 +512,12 @@ html, body {
   background: var(--surface-raised);
   color: var(--text-muted);
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .station-chip.active {
   border-color: var(--live);
-  background: rgba(255, 176, 32, 0.14);
+  background: var(--live-dim);
   color: var(--live);
 }
 
@@ -485,7 +525,7 @@ html, body {
   transform: scale(0.96);
 }
 
-/* ---------- Buttons ---------- */
+/* ---------- Action Buttons ---------- */
 .btn {
   font-family: inherit;
   font-size: 15px;
@@ -495,6 +535,7 @@ html, body {
   border: none;
   cursor: pointer;
   width: 100%;
+  transition: transform 0.1s ease, background 0.15s ease;
 }
 
 .btn:active {
@@ -503,8 +544,11 @@ html, body {
 
 .btn-primary {
   background: var(--live);
-  color: #1A1200;
-  margin-top: 12px;
+  color: #05070A; /* Ensures deep dark text contrast on cyan button across both themes */
+}
+
+.btn-primary:active {
+  background: #0284C7; /* Darker cyan active feedback state */
 }
 
 .btn-primary:disabled {
@@ -527,7 +571,7 @@ html, body {
   padding: 4px 0 0;
 }
 
-/* ---------- Toast ---------- */
+/* ---------- Toast Popups ---------- */
 .toast {
   position: fixed;
   left: 50%;
