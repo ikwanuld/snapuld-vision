@@ -265,6 +265,20 @@ body.light-theme .session-count {
   margin: 0 2px;
 }
 
+.modules-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modules-title {
+  margin: 4px 2px 0;
+}
+
+.modules-hint {
+  margin: 0 2px 6px;
+}
+
 .nav-grid {
   display: flex;
   flex-direction: column;
@@ -287,6 +301,15 @@ body.light-theme .session-count {
 
 .nav-card:active {
   transform: scale(0.98);
+}
+
+.nav-card:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nav-card:disabled:active {
+  transform: none;
 }
 
 .nav-icon {
