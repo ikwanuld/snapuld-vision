@@ -13,6 +13,9 @@
   <div class="app">
 
     <header class="app-header">
+      <button class="header-back" id="header-back-btn" type="button" aria-label="Back to home" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
@@ -21,83 +24,173 @@
           </svg>
         </span>
         <div>
-          <h1>SnapULD Vision</h1>
-          <p class="subtitle">Camera-based ULD scanning</p>
+          <h1 id="header-title">SnapULD Vision</h1>
+          <p class="subtitle" id="header-subtitle">AI ULD Operations Platform</p>
         </div>
       </div>
-      <div class="status-pill" id="connection-status">
+      <div class="status-pill" id="connection-status" hidden>
         <span class="dot"></span>
         <span id="connection-status-text">Camera Ready</span>
       </div>
     </header>
 
-    <section class="card camera-card">
-      <p class="card-title">Live Camera</p>
+    <!-- ============ HOME ============ -->
+    <main class="view" id="view-home">
+      <p class="card-hint home-intro">Select a module to continue.</p>
 
-      <div class="camera-wrap">
-        <video id="camera-video" autoplay playsinline muted></video>
-        <canvas id="capture-canvas"></canvas>
+      <nav class="nav-grid">
+        <button class="nav-card" id="nav-scanner" type="button">
+          <span class="nav-icon">📷</span>
+          <span class="nav-text">
+            <span class="nav-title">ULD Scanner</span>
+            <span class="nav-desc">Live camera scan &amp; log ULDs</span>
+          </span>
+          <span class="nav-chevron">›</span>
+        </button>
 
-        <div class="scan-frame"></div>
+        <button class="nav-card" id="nav-dashboard" type="button">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">
+            <span class="nav-title">Dashboard</span>
+            <span class="nav-desc">Scan analytics &amp; trends</span>
+          </span>
+          <span class="nav-chevron">›</span>
+        </button>
 
-        <div class="scanning-badge" id="scanning-badge">
-          <span class="live-dot"></span>
-          <span id="scanning-badge-text">Scanning</span>
+        <button class="nav-card" id="nav-history" type="button">
+          <span class="nav-icon">📜</span>
+          <span class="nav-text">
+            <span class="nav-title">Scan History</span>
+            <span class="nav-desc">Search, filter &amp; export records</span>
+          </span>
+          <span class="nav-chevron">›</span>
+        </button>
+
+        <button class="nav-card nav-card-future" id="nav-damage" type="button">
+          <span class="nav-icon">🛠️</span>
+          <span class="nav-text">
+            <span class="nav-title">AI Damage Detection <span class="future-badge">Future</span></span>
+            <span class="nav-desc">Visual inspection module</span>
+          </span>
+          <span class="nav-chevron">›</span>
+        </button>
+      </nav>
+
+      <footer class="app-footer">SnapULD Vision &middot; MVP &middot; GitHub Pages</footer>
+    </main>
+
+    <!-- ============ SETUP ============ -->
+    <main class="view" id="view-setup" hidden>
+      <section class="card">
+        <p class="card-title">Operator</p>
+        <div class="form-row">
+          <label for="username-input">Email</label>
+          <input type="email" id="username-input" placeholder="name@airasia.com" autocomplete="off">
+        </div>
+      </section>
+
+      <section class="card">
+        <p class="card-title">Station</p>
+        <div class="station-chip-group" id="station-select" role="group" aria-label="Station"></div>
+      </section>
+
+      <section class="card">
+        <p class="card-title">Flight Type</p>
+        <div class="station-chip-group" id="flight-type-select" role="group" aria-label="Flight Type"></div>
+        <div class="expected-uld-chips" id="expected-uld-chips"></div>
+        <p class="card-hint" id="expected-uld-hint">Select a flight type to see expected ULD prefixes.</p>
+      </section>
+
+      <button class="btn btn-primary" id="start-scan-btn" type="button" disabled>
+        Start Scanning
+      </button>
+    </main>
+
+    <!-- ============ SCANNER ============ -->
+    <main class="view" id="view-scanner" hidden>
+      <div class="context-bar">
+        <div class="context-item"><span class="context-label">Station</span><span class="context-value" id="context-station">—</span></div>
+        <div class="context-item"><span class="context-label">Flight</span><span class="context-value" id="context-flight">—</span></div>
+        <div class="context-item context-item-grow"><span class="context-label">Operator</span><span class="context-value" id="context-operator">—</span></div>
+        <button class="context-edit-btn" id="edit-details-btn" type="button">Edit</button>
+      </div>
+
+      <section class="card camera-card">
+        <p class="card-title">Live Camera</p>
+        <div class="camera-wrap">
+          <video id="camera-video" autoplay playsinline muted></video>
+          <canvas id="capture-canvas"></canvas>
+          <div class="scan-frame"></div>
+          <div class="scanning-badge" id="scanning-badge">
+            <span class="live-dot"></span>
+            <span id="scanning-badge-text">Scanning</span>
+          </div>
+          <div class="camera-overlay-msg" id="camera-overlay-msg"></div>
         </div>
 
-        <div class="camera-overlay-msg" id="camera-overlay-msg"></div>
-      </div>
+        <div class="detection-result">
+          <div class="detection-status" id="detection-status">Point camera at a ULD tag</div>
+          <div class="detection-value" id="detection-value">&nbsp;</div>
+          <div class="candidate-chips" id="candidate-chips"></div>
+        </div>
+      </section>
 
-      <div class="detection-result">
-        <div class="detection-status" id="detection-status">Point camera at a ULD tag</div>
-        <div class="detection-value" id="detection-value">&nbsp;</div>
-        <div class="candidate-chips" id="candidate-chips"></div>
-      </div>
-    </section>
+      <section class="card">
+        <div class="card-title-row">
+          <p class="card-title">Pending Scans</p>
+          <span class="session-count" id="pending-count">0 pending</span>
+        </div>
+        <p class="card-hint">Check each code and type before submitting.</p>
+        <div class="pending-list" id="pending-queue-list">
+          <span class="empty-hint">No scans queued yet. Detected ULDs will appear here.</span>
+        </div>
+        <button class="btn btn-primary" id="submit-queue-btn" type="button" disabled>
+          Submit to Sheet
+        </button>
+      </section>
 
-    <section class="card">
-      <div class="card-title-row">
-        <p class="card-title">Pending Scans</p>
-        <span class="session-count" id="pending-count">0 pending</span>
-      </div>
-      <p class="card-hint">Check each code before submitting — tap a field to fix a misread character.</p>
-      <div class="pending-list" id="pending-queue-list">
-        <span class="empty-hint">No scans queued yet. Detected ULDs will appear here.</span>
-      </div>
-      <button class="btn btn-primary" id="submit-queue-btn" type="button" disabled>
-        Submit to Sheet
-      </button>
-    </section>
+      <section class="card">
+        <div class="card-title-row">
+          <p class="card-title">Scanned ULDs</p>
+          <span class="session-count" id="session-saved-count">0 scanned</span>
+        </div>
+        <div class="scanned-list" id="scanned-list">
+          <span class="empty-hint">Nothing submitted yet this session.</span>
+        </div>
+      </section>
 
-    <section class="card">
-      <div class="card-title-row">
-        <p class="card-title">Last Saved ULD</p>
-        <span class="session-count" id="session-saved-count">0 saved</span>
-      </div>
-      <div class="last-saved-row" id="last-saved-row">
-        <span class="empty-hint">Nothing submitted yet this session.</span>
-      </div>
-    </section>
+      <section class="card">
+        <p class="card-title">Camera Controls</p>
+        <button class="btn btn-secondary" id="restart-camera-btn" type="button">Restart Camera</button>
+      </section>
+    </main>
 
-    <section class="card">
-      <p class="card-title">Scan Details</p>
+    <!-- ============ DASHBOARD (placeholder) ============ -->
+    <main class="view" id="view-dashboard" hidden>
+      <section class="card placeholder-card">
+        <p class="card-title">Coming Next</p>
+        <p class="card-hint">Today's / weekly / monthly scan counts, Verified vs Unknown ULD, OCR success rate, average scan time, most-scanned ULD types, station distribution, and recent activity will appear here once wired up to the full scan log.</p>
+      </section>
+    </main>
 
-      <div class="form-row">
-        <label id="station-label">Station</label>
-        <div class="station-chip-group" id="station-select" role="group" aria-labelledby="station-label"></div>
-      </div>
+    <!-- ============ SCAN HISTORY (placeholder) ============ -->
+    <main class="view" id="view-history" hidden>
+      <section class="card placeholder-card">
+        <p class="card-title">Coming Next</p>
+        <p class="card-hint">A full searchable, filterable, sortable scan log with CSV export and complete per-scan detail is next up.</p>
+      </section>
+    </main>
 
-      <div class="form-row">
-        <label for="user-input">Operator Name</label>
-        <input type="text" id="user-input" placeholder="e.g. Ikwan" autocomplete="off">
-      </div>
+    <!-- ============ AI DAMAGE DETECTION (future) ============ -->
+    <main class="view" id="view-damage" hidden>
+      <section class="card placeholder-card">
+        <span class="future-badge future-badge-lg">Future Module</span>
+        <p class="card-hint damage-hint">
+          Detecting dents, bent frames, broken doors, missing locks, cracks, holes, damaged nets, and missing plates from a photo needs a trained computer-vision model — that's a separate build (image data collection + model training), not something OCR or regex can do. This screen is reserved for it, with damage-level reporting (Normal / Minor / Major / Excessive) and saved inspection reports once it's ready.
+        </p>
+      </section>
+    </main>
 
-      <button class="btn btn-secondary" id="restart-camera-btn" type="button">
-        Restart Camera
-      </button>
-    </section>
-
-    <footer class="app-footer">SnapULD Vision &middot; MVP &middot; GitHub Pages</footer>
   </div>
 
   <div class="toast" id="toast"></div>
