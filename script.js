@@ -1,4 +1,4 @@
-](function () {
+(function () {
   'use strict';
 
   const OCR_INTERVAL_MS = 2500;
@@ -205,24 +205,36 @@
   }
 
   function wireNav() {
-    dom.navScanner.addEventListener('click', function () {
-      if (dom.navScanner.disabled) return;
-      showView('scanner');
-    });
-    dom.navDashboard.addEventListener('click', function () {
-      if (dom.navDashboard.disabled) return;
-      showView('dashboard');
-    });
-    dom.navHistory.addEventListener('click', function () {
-      if (dom.navHistory.disabled) return;
-      showView('history');
-    });
-    dom.navDamage.addEventListener('click', function () {
-      if (dom.navDamage.disabled) return;
-      showView('damage');
-    });
+    dom.navScanner.addEventListener('click', function () { goToModule('scanner'); });
+    dom.navDashboard.addEventListener('click', function () { goToModule('dashboard'); });
+    dom.navHistory.addEventListener('click', function () { goToModule('history'); });
+    dom.navDamage.addEventListener('click', function () { goToModule('damage'); });
     dom.headerBackBtn.addEventListener('click', function () { showView('home'); });
     dom.editDetailsBtn.addEventListener('click', function () { showView('home'); });
+  }
+
+  // Modules stay clickable even before setup is complete so a tap always
+  // gives feedback — either it navigates, or it points at what's missing.
+  function goToModule(name) {
+    if (isSetupComplete()) {
+      showView(name);
+      return;
+    }
+    showToast('Fill in email, station & flight type first', 'info');
+    focusFirstIncompleteField();
+  }
+
+  function focusFirstIncompleteField() {
+    const emailOk = /\S+@\S+\.\S+/.test(state.setup.operator || '');
+    let target = null;
+    if (!emailOk) target = dom.usernameInput;
+    else if (!state.setup.station) target = dom.stationSelect;
+    else if (!state.setup.flightType) target = dom.flightTypeSelect;
+
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (typeof target.focus === 'function') target.focus();
+    }
   }
 
   function isSetupComplete() {
@@ -314,7 +326,8 @@
     const complete = isSetupComplete();
 
     [dom.navScanner, dom.navDashboard, dom.navHistory, dom.navDamage].forEach(function (btn) {
-      btn.disabled = !complete;
+      btn.classList.toggle('nav-card-disabled', !complete);
+      btn.setAttribute('aria-disabled', String(!complete));
     });
 
     dom.modulesHint.textContent = complete
