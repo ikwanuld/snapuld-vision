@@ -205,6 +205,13 @@ html, body {
   gap: 14px;
 }
 
+/* .view sets display:flex, which (by CSS specificity) silently overrides
+   the browser's default display:none for [hidden] — without this rule,
+   every view stacks and shows at once instead of one page at a time. */
+.view[hidden] {
+  display: none;
+}
+
 /* ---------- Cards ---------- */
 .card {
   background: var(--surface);
