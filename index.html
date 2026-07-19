@@ -34,51 +34,8 @@
       </div>
     </header>
 
-    <!-- ============ HOME (Modules + Scan Details) ============ -->
+    <!-- ============ HOME (Scan Details + Modules) ============ -->
     <main class="view" id="view-home">
-      <div class="modules-section">
-        <p class="card-title modules-title">Modules</p>
-        <p class="card-hint modules-hint" id="modules-hint">Fill in email, station &amp; flight type to unlock.</p>
-
-        <nav class="nav-grid">
-          <button class="nav-card" id="nav-scanner" type="button" disabled>
-            <span class="nav-icon">📷</span>
-            <span class="nav-text">
-              <span class="nav-title">ULD Scanner</span>
-              <span class="nav-desc">Live camera scan &amp; log ULDs</span>
-            </span>
-            <span class="nav-chevron">›</span>
-          </button>
-
-          <button class="nav-card" id="nav-dashboard" type="button" disabled>
-            <span class="nav-icon">📊</span>
-            <span class="nav-text">
-              <span class="nav-title">Dashboard</span>
-              <span class="nav-desc">Scan analytics &amp; trends</span>
-            </span>
-            <span class="nav-chevron">›</span>
-          </button>
-
-          <button class="nav-card" id="nav-history" type="button" disabled>
-            <span class="nav-icon">📜</span>
-            <span class="nav-text">
-              <span class="nav-title">Scan History</span>
-              <span class="nav-desc">Search, filter &amp; export records</span>
-            </span>
-            <span class="nav-chevron">›</span>
-          </button>
-
-          <button class="nav-card nav-card-future" id="nav-damage" type="button" disabled>
-            <span class="nav-icon">🛠️</span>
-            <span class="nav-text">
-              <span class="nav-title">AI Damage Detection <span class="future-badge">Future</span></span>
-              <span class="nav-desc">Visual inspection module</span>
-            </span>
-            <span class="nav-chevron">›</span>
-          </button>
-        </nav>
-      </div>
-
       <section class="card">
         <p class="card-title">Operator</p>
         <div class="form-row">
@@ -98,6 +55,49 @@
         <div class="expected-uld-chips" id="expected-uld-chips"></div>
         <p class="card-hint" id="expected-uld-hint">Select a flight type to see expected ULD prefixes.</p>
       </section>
+
+      <div class="modules-section">
+        <p class="card-title modules-title">Modules</p>
+        <p class="card-hint modules-hint" id="modules-hint">Fill in email, station &amp; flight type to unlock.</p>
+
+        <nav class="nav-grid">
+          <button class="nav-card nav-card-disabled" id="nav-scanner" type="button" aria-disabled="true">
+            <span class="nav-icon">📷</span>
+            <span class="nav-text">
+              <span class="nav-title">ULD Scanner</span>
+              <span class="nav-desc">Live camera scan &amp; log ULDs</span>
+            </span>
+            <span class="nav-chevron">›</span>
+          </button>
+
+          <button class="nav-card nav-card-disabled" id="nav-dashboard" type="button" aria-disabled="true">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">
+              <span class="nav-title">Dashboard</span>
+              <span class="nav-desc">Scan analytics &amp; trends</span>
+            </span>
+            <span class="nav-chevron">›</span>
+          </button>
+
+          <button class="nav-card nav-card-disabled" id="nav-history" type="button" aria-disabled="true">
+            <span class="nav-icon">📜</span>
+            <span class="nav-text">
+              <span class="nav-title">Scan History</span>
+              <span class="nav-desc">Search, filter &amp; export records</span>
+            </span>
+            <span class="nav-chevron">›</span>
+          </button>
+
+          <button class="nav-card nav-card-future nav-card-disabled" id="nav-damage" type="button" aria-disabled="true">
+            <span class="nav-icon">🛠️</span>
+            <span class="nav-text">
+              <span class="nav-title">AI Damage Detection <span class="future-badge">Future</span></span>
+              <span class="nav-desc">Visual inspection module</span>
+            </span>
+            <span class="nav-chevron">›</span>
+          </button>
+        </nav>
+      </div>
 
       <footer class="app-footer">SnapULD Vision &middot; MVP &middot; GitHub Pages</footer>
     </main>
