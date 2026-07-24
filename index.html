@@ -136,7 +136,13 @@
           <p class="card-title">Pending Scans</p>
           <span class="session-count" id="pending-count">0 pending</span>
         </div>
-        <p class="card-hint">Check each code and type before submitting.</p>
+        <p class="card-hint">Auto-added on detection — check &amp; fix the code before submitting, or type one in manually.</p>
+
+        <div class="manual-add-row">
+          <input type="text" id="manual-uld-input" placeholder="Type ULD code manually, e.g. AKE12345MH" autocomplete="off" spellcheck="false">
+          <button class="manual-add-btn" id="manual-add-btn" type="button">+ Add</button>
+        </div>
+
         <div class="pending-list" id="pending-queue-list">
           <span class="empty-hint">No scans queued yet. Detected ULDs will appear here.</span>
         </div>
@@ -150,6 +156,7 @@
           <p class="card-title">Scanned ULDs</p>
           <span class="session-count" id="session-saved-count">0 scanned</span>
         </div>
+        <p class="card-hint">Tap &#9998; to fix a code after submission.</p>
         <div class="type-count-chips" id="type-count-chips"></div>
         <div class="scanned-list" id="scanned-list">
           <span class="empty-hint">Nothing submitted yet this session.</span>
