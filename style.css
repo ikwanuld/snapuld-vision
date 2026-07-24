@@ -652,6 +652,56 @@ body.light-theme .candidate-chip { color: #0284C7; }
   transform: scale(0.97);
 }
 
+/* ---------- Manual quick-add ---------- */
+.manual-add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.manual-add-row input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-main);
+}
+
+.manual-add-row input:focus {
+  outline: none;
+  border-color: var(--live);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
+}
+
+.manual-add-btn {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  background: var(--live-dim);
+  color: var(--live);
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: light) {
+  .manual-add-btn { color: #0284C7; }
+}
+body.light-theme .manual-add-btn { color: #0284C7; }
+
+.manual-add-btn:active {
+  transform: scale(0.96);
+}
+
 /* ---------- Pending queue ---------- */
 .pending-list {
   display: flex;
@@ -736,11 +786,15 @@ body.light-theme .pending-meta .type-known { color: #0369a1; }
 .scanned-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   border: 1px solid var(--border);
+}
+
+.scanned-row.editing {
+  padding: 8px;
 }
 
 .scanned-main {
@@ -762,6 +816,42 @@ body.light-theme .pending-meta .type-known { color: #0369a1; }
 .scanned-sub {
   font-size: 11px;
   color: var(--text-faint);
+}
+
+.scanned-edit-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.scanned-edit-btn:active {
+  transform: scale(0.94);
+}
+
+.scanned-save-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: var(--confirmed-dim);
+  color: var(--confirmed);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scanned-save-btn:active {
+  transform: scale(0.95);
 }
 
 .badge {
