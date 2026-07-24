@@ -15,9 +15,16 @@
   // pending queue. This is the floor for ANY candidate, corrected or not.
   const MIN_RAW_CONFIDENCE = 45;
 
-  // A ULD code is always 3 letters, 5 digits, 2 letters.
-  const ULD_PATTERN_TYPES = ['L', 'L', 'L', 'D', 'D', 'D', 'D', 'D', 'L', 'L'];
-  const ULD_CODE_LENGTH = ULD_PATTERN_TYPES.length;
+  // A ULD code is 3 letters (type prefix) + serial digits + a 2-char
+  // alphanumeric suffix (owner code, e.g. ...MU, ...CA, or pallet contour
+  // code, e.g. ...R7, ...R9, ...C6 — both chars can be letter OR digit).
+  // Serial is normally 5 digits, EXCEPT for SV (Saudia) and AI (Air India)
+  // owned ULDs, which use a 4-digit serial. Both lengths are checked.
+  const ULD_PATTERN_TYPES_STANDARD = ['L', 'L', 'L', 'D', 'D', 'D', 'D', 'D', 'A', 'A'];
+  const ULD_PATTERN_TYPES_SHORT = ['L', 'L', 'L', 'D', 'D', 'D', 'D', 'A', 'A'];
+  const ULD_CODE_LENGTH_STANDARD = ULD_PATTERN_TYPES_STANDARD.length;
+  const ULD_CODE_LENGTH_SHORT = ULD_PATTERN_TYPES_SHORT.length;
+  const SHORT_SERIAL_OWNER_CODES = ['SV', 'AI'];
 
   const LETTER_FIX = { '0': 'O', '1': 'I', '5': 'S', '8': 'B', '2': 'Z' };
   const DIGIT_FIX = { 'O': '0', 'I': '1', 'L': '1', 'S': '5', 'B': '8', 'Z': '2' };
@@ -897,17 +904,27 @@
       if (LETTER_FIX[ch]) return { value: LETTER_FIX[ch], corrected: true };
       return null;
     }
+    if (expectedType === 'A') {
+      // Suffix chars: legitimately letters (owner code, e.g. "MU") OR
+      // digits (pallet contour code, e.g. "R7"). Both are real ULD
+      // formats, so accept either as-is rather than "correcting" one into
+      // the other — there's no way to tell which was intended.
+      if ((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) {
+        return { value: ch, corrected: false };
+      }
+      return null;
+    }
     if (ch >= '0' && ch <= '9') return { value: ch, corrected: false };
     if (DIGIT_FIX[ch]) return { value: DIGIT_FIX[ch], corrected: true };
     return null;
   }
 
-  function tryCorrectWindow(windowStr) {
+  function tryCorrectWindow(windowStr, patternTypes) {
     let corrected = '';
     let anyCorrection = false;
 
-    for (let i = 0; i < ULD_CODE_LENGTH; i++) {
-      const result = correctChar(windowStr[i], ULD_PATTERN_TYPES[i]);
+    for (let i = 0; i < patternTypes.length; i++) {
+      const result = correctChar(windowStr[i], patternTypes[i]);
       if (!result) return null;
       corrected += result.value;
       if (result.corrected) anyCorrection = true;
@@ -916,7 +933,8 @@
     return { code: corrected, corrected: anyCorrection };
   }
 
-  // Smart correction: regex-shaped window + position-aware letter/digit
+  // Smart correction: regex-shaped window (tried at both the standard
+  // 10-char and short 9-char lengths) + position-aware letter/digit
   // fixing + confidence gating, with a stricter confidence bar when the
   // corrected prefix isn't one of the known ULD types.
   function extractValidUldCandidates(rawText, confidence) {
@@ -930,16 +948,23 @@
 
     const found = new Map();
 
-    for (let start = 0; start <= cleanedText.length - ULD_CODE_LENGTH; start++) {
-      const windowStr = cleanedText.substr(start, ULD_CODE_LENGTH);
-      const result = tryCorrectWindow(windowStr);
-      if (!result) continue;
+    function considerWindow(windowStr, patternTypes) {
+      const result = tryCorrectWindow(windowStr, patternTypes);
+      if (!result) return;
+
+      // The 4-digit-serial (short) format only exists for SV/AI-owned
+      // ULDs — without this check, any random 9-char slice matching the
+      // shape would false-positive as a valid code.
+      if (patternTypes.length === ULD_CODE_LENGTH_SHORT) {
+        const ownerCode = result.code.slice(-2);
+        if (SHORT_SERIAL_OWNER_CODES.indexOf(ownerCode) === -1) return;
+      }
 
       if (result.corrected) {
         const prefix = result.code.slice(0, 3);
         const knownPrefix = KNOWN_ULD_PREFIXES.indexOf(prefix) !== -1;
         const requiredConfidence = knownPrefix ? CORRECTION_MIN_CONFIDENCE : CORRECTION_MIN_CONFIDENCE_UNKNOWN_PREFIX;
-        if (confidence < requiredConfidence) continue;
+        if (confidence < requiredConfidence) return;
       }
 
       // Prefer an exact (non-corrected) reading of a code over a corrected
@@ -950,6 +975,13 @@
       } else if (!result.corrected) {
         found.set(result.code, false);
       }
+    }
+
+    for (let start = 0; start <= cleanedText.length - ULD_CODE_LENGTH_STANDARD; start++) {
+      considerWindow(cleanedText.substr(start, ULD_CODE_LENGTH_STANDARD), ULD_PATTERN_TYPES_STANDARD);
+    }
+    for (let start = 0; start <= cleanedText.length - ULD_CODE_LENGTH_SHORT; start++) {
+      considerWindow(cleanedText.substr(start, ULD_CODE_LENGTH_SHORT), ULD_PATTERN_TYPES_SHORT);
     }
 
     return Array.from(found.entries()).map(function (entry) {
