@@ -1,11 +1,7 @@
 (function () {
   'use strict';
 
-  const OCR_INTERVAL_MS = 2500;
-
-  // How many consecutive frames must produce the same code before it's
-  // treated as confirmed and added to the pending list.
-  const STABLE_FRAMES_REQUIRED = 3;
+  const OCR_INTERVAL_MS = 1200; // was 2500 — faster cycle since we no longer wait on a stabilizer
 
   // Auto-correction of common OCR letter/digit confusions is only trusted
   // when Tesseract's own confidence for the frame is at least this high.
@@ -13,6 +9,11 @@
   // the known ULD types below — an unfamiliar prefix needs a cleaner read.
   const CORRECTION_MIN_CONFIDENCE = 60;
   const CORRECTION_MIN_CONFIDENCE_UNKNOWN_PREFIX = 75;
+
+  // With the multi-frame stabilizer removed, a single low-confidence frame
+  // could otherwise slip an exact-pattern-but-garbage code straight into the
+  // pending queue. This is the floor for ANY candidate, corrected or not.
+  const MIN_RAW_CONFIDENCE = 45;
 
   // A ULD code is always 3 letters, 5 digits, 2 letters.
   const ULD_PATTERN_TYPES = ['L', 'L', 'L', 'D', 'D', 'D', 'D', 'D', 'L', 'L'];
@@ -69,7 +70,6 @@
     workerReady: false,
     audioCtx: null,
 
-    candidateStreaks: new Map(),
     savedUlds: new Set(),
     savedCount: 0,
     pendingQueue: [],
@@ -127,6 +127,9 @@
     detectionValue: document.getElementById('detection-value'),
     candidateChips: document.getElementById('candidate-chips'),
 
+    manualUldInput: document.getElementById('manual-uld-input'),
+    manualAddBtn: document.getElementById('manual-add-btn'),
+
     pendingQueueList: document.getElementById('pending-queue-list'),
     pendingCount: document.getElementById('pending-count'),
     submitQueueBtn: document.getElementById('submit-queue-btn'),
@@ -164,6 +167,14 @@
       stopOcrLoop();
       stopCamera();
       startCamera();
+    });
+
+    dom.manualAddBtn.addEventListener('click', addManualUld);
+    dom.manualUldInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addManualUld();
+      }
     });
 
     showView('home');
@@ -838,6 +849,11 @@
 
   // ================= Detection / recognition =================
 
+  // No frame-stabilizer: a valid, confidence-gated candidate is added to
+  // the pending queue the moment it's read. Speed matters more on the ramp
+  // than waiting for repeat confirmation — and every pending/scanned code
+  // stays fully editable, so a bad OCR read is a quick text fix, not a
+  // re-scan.
   function handleOcrResult(ocrResult) {
     const rawText = ocrResult.text;
     const confidence = ocrResult.confidence;
@@ -847,60 +863,27 @@
       if (DEBUG_OCR) {
         dom.detectionValue.textContent = rawText ? rawText.trim().slice(0, 40) : '(empty)';
       }
-      setDetectionState('none', 'No ULD Found');
+      setDetectionState('none', 'Point camera at a ULD tag');
       renderCandidates([]);
-      state.candidateStreaks.clear();
       return;
     }
 
-    const seenThisFrame = new Set();
-    const confirmedThisFrame = [];
+    const newCandidates = candidates.filter(function (c) { return !isAlreadyTracked(c.code); });
 
-    candidates.forEach(function (cand) {
-      seenThisFrame.add(cand.code);
-      if (isAlreadyTracked(cand.code)) return;
+    if (newCandidates.length === 0) {
+      setDetectionState('found', 'Already queued: ' + candidates.map(function (c) { return c.code; }).join(', '));
+      dom.detectionValue.textContent = candidates.map(function (c) { return c.code; }).join(' / ');
+      renderCandidates([]);
+      return;
+    }
 
-      const streak = (state.candidateStreaks.get(cand.code) || 0) + 1;
-      state.candidateStreaks.set(cand.code, streak);
-
-      if (streak >= STABLE_FRAMES_REQUIRED) {
-        confirmedThisFrame.push(cand);
-      }
-    });
-
-    Array.from(state.candidateStreaks.keys()).forEach(function (code) {
-      if (!seenThisFrame.has(code)) {
-        state.candidateStreaks.delete(code);
-      }
-    });
-
-    confirmedThisFrame.forEach(function (cand) {
-      state.candidateStreaks.delete(cand.code);
+    newCandidates.forEach(function (cand) {
       addToPendingQueue(cand.code, cand.corrected, confidence);
     });
 
-    const pending = candidates.filter(function (c) {
-      return !isAlreadyTracked(c.code);
-    });
-
-    if (pending.length === 0) {
-      if (confirmedThisFrame.length > 0) {
-        setDetectionState('found', '\u2713 Added to Pending List');
-      }
-      return;
-    }
-
-    if (pending.length === 1) {
-      const streak = state.candidateStreaks.get(pending[0].code) || STABLE_FRAMES_REQUIRED;
-      setDetectionState('searching', 'Stabilizing ' + Math.min(streak, STABLE_FRAMES_REQUIRED) + '/' + STABLE_FRAMES_REQUIRED + '...');
-      dom.detectionValue.textContent = pending[0].code + (pending[0].corrected ? ' (auto-corrected)' : '');
-      renderCandidates([]);
-      return;
-    }
-
-    setDetectionState('searching', 'Multiple ULDs \u2013 stabilizing...');
-    dom.detectionValue.textContent = pending.map(function (c) { return c.code; }).join(' / ');
-    renderCandidates(pending, confidence);
+    setDetectionState('found', '\u2713 Added ' + newCandidates.length + (newCandidates.length > 1 ? ' ULDs' : ' ULD'));
+    dom.detectionValue.textContent = newCandidates.map(function (c) { return c.code; }).join(' / ');
+    renderCandidates([]);
   }
 
   function isAlreadyTracked(code) {
@@ -938,6 +921,10 @@
   // corrected prefix isn't one of the known ULD types.
   function extractValidUldCandidates(rawText, confidence) {
     if (!rawText) return [];
+    // Floor confidence check — without the old multi-frame stabilizer this
+    // is the main defence against a single garbage frame reaching the queue.
+    if (typeof confidence === 'number' && confidence < MIN_RAW_CONFIDENCE) return [];
+
     const upperText = rawText.toUpperCase();
     const cleanedText = upperText.replace(/[^A-Z0-9]/g, '');
 
@@ -955,8 +942,13 @@
         if (confidence < requiredConfidence) continue;
       }
 
-      if (!found.has(result.code) || found.get(result.code)) {
+      // Prefer an exact (non-corrected) reading of a code over a corrected
+      // one — if we've already got this code as an exact match, don't let
+      // a later corrected window downgrade its confidence flag.
+      if (!found.has(result.code)) {
         found.set(result.code, result.corrected);
+      } else if (!result.corrected) {
+        found.set(result.code, false);
       }
     }
 
@@ -990,6 +982,24 @@
   function setScanningIndicator(isScanning) {
     dom.scanningBadge.style.display = isScanning ? 'flex' : 'none';
     dom.scanningBadgeText.textContent = isScanning ? 'Scanning' : 'Idle';
+  }
+
+  // ================= Manual entry =================
+
+  // Fast fallback for when a tag is damaged, unreadable, or the camera just
+  // isn't cooperating — type the code straight into the pending queue.
+  function addManualUld() {
+    const code = dom.manualUldInput.value.trim().toUpperCase();
+    if (!code) return;
+
+    if (isAlreadyTracked(code)) {
+      showToast('Already queued or scanned', 'info');
+      return;
+    }
+
+    addToPendingQueue(code, false, null);
+    dom.manualUldInput.value = '';
+    dom.manualUldInput.focus();
   }
 
   // ================= Pending queue =================
@@ -1140,6 +1150,8 @@
 
           // Same record object goes into both: scannedLog is this session's
           // view (resets on reload), historyLog is the permanent archive.
+          // Editing the record later (see startEditingScannedRow) updates
+          // both lists at once because they share this one object.
           state.scannedLog.unshift(record);
           state.historyLog.unshift(record);
         });
@@ -1260,9 +1272,70 @@
     badge.className = 'badge ' + (record.syncStatus === 'synced' ? 'badge-synced' : 'badge-pending-sync');
     badge.textContent = record.syncStatus === 'synced' ? 'Synced' : 'Pending Sync';
 
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'scanned-edit-btn';
+    editBtn.setAttribute('aria-label', 'Edit ULD code');
+    editBtn.textContent = '\u270E';
+    editBtn.addEventListener('click', function () {
+      startEditingScannedRow(row, record);
+    });
+
     row.appendChild(main);
     row.appendChild(badge);
+    row.appendChild(editBtn);
     return row;
+  }
+
+  // Lets a submitted ULD be corrected after the fact — swaps the row into
+  // an editable input. `record` is the same object referenced by both
+  // scannedLog and historyLog, so saving here updates both automatically.
+  function startEditingScannedRow(row, record) {
+    row.innerHTML = '';
+    row.classList.add('editing');
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'pending-input';
+    input.value = record.uld;
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'scanned-save-btn';
+    saveBtn.setAttribute('aria-label', 'Save ULD code');
+    saveBtn.textContent = '\u2713';
+
+    function commit() {
+      const newCode = input.value.trim().toUpperCase();
+      if (newCode) {
+        state.savedUlds.delete(record.uld);
+        record.uld = newCode;
+        state.savedUlds.add(newCode);
+
+        const prefix = newCode.slice(0, 3);
+        const typeInfo = ULD_TYPE_INFO[prefix];
+        record.type = typeInfo ? typeInfo.label : 'Unknown';
+        const expectedList = EXPECTED_PREFIXES[record.flightType] || [];
+        record.expectedMatch = expectedList.indexOf(prefix) !== -1;
+
+        persistHistoryLog();
+        showToast('ULD code updated', 'success');
+      }
+      renderScannedList();
+      if (state.currentView === 'history') renderHistoryList();
+    }
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    });
+    saveBtn.addEventListener('click', commit);
+
+    row.appendChild(input);
+    row.appendChild(saveBtn);
+    input.focus();
+    input.select();
   }
 
   function formatTime(isoString) {
